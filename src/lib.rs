@@ -3,7 +3,7 @@ use std::{
     fmt::Display,
 };
 
-use proc_macro::{TokenStream};
+use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote, ToTokens};
 use syn::{
@@ -11,8 +11,9 @@ use syn::{
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    Data, DeriveInput, Error, Fields, FieldsUnnamed, PredicateType,
-    Token, Type, Variant, WhereClause, WherePredicate,
+    token::Comma,
+    Data, DeriveInput, Error, Field, Fields, FieldsNamed, FieldsUnnamed, PredicateType, Token,
+    Variant, WhereClause, WherePredicate,
 };
 
 /// name(T) where T : Hello
@@ -20,7 +21,6 @@ struct VariantPattern {
     variant: Variant,
     where_clause: Option<WhereClause>,
 }
-
 
 impl Parse for VariantPattern {
     fn parse(input: parse::ParseStream) -> syn::Result<Self> {
@@ -51,41 +51,65 @@ impl ErrorStash {
     }
 }
 
-fn compare_ty(pty: &Type, ity: &Type, pairs: &mut PatternTypePairs) -> Option<(String, String)> {
-    let pty = pty.to_token_stream().to_string();
-    let ity = ity.to_token_stream().to_string();
-
-    if !(pty.eq("_") || pty.to_uppercase().eq(&pty)) && pty != ity {
-        return Some((pty, ity));
-    }
-
-    if let Some(set) = pairs.get_mut(&pty) {
-        set.insert(ity);
-    } else {
-        let mut bset = BTreeSet::new();
-        bset.insert(ity);
-        pairs.insert(pty, bset);
-    }
-
-    None
+fn string<T: ToTokens>(x: &T) -> String {
+    x.to_token_stream().to_string()
 }
 
 fn validate_and_collect(
-    pat_fields: &FieldsUnnamed,
-    item_fields: &FieldsUnnamed,
+    pat_fields: &Punctuated<Field, Comma>,
+    item_fields: &Punctuated<Field, Comma>,
     errors: &mut ErrorStash,
 ) -> PatternTypePairs {
     let mut pairs: PatternTypePairs = BTreeMap::default();
     pat_fields
-        .unnamed
         .iter()
-        .zip(item_fields.unnamed.iter())
+        .zip(item_fields.iter())
         .for_each(|(pat, item)| {
-            if let Some((fty, ty)) = compare_ty(&pat.ty, &item.ty, &mut pairs) {
-                errors.extend(item.ty.span(), format!("Found {fty} but expected {ty}."))
+            let (pty, ity) = (string(&pat.ty), string(&item.ty));
+
+            let is_generic = pty.eq("_") || pty.to_uppercase().eq(&pty);
+
+            if !is_generic && pty != ity {
+                return errors.extend(item.ty.span(), format!("Found {ity} but expected {pty}."));
+            }
+
+            if let Some(set) = pairs.get_mut(&pty) {
+                set.insert(ity);
+            } else {
+                let mut bset = BTreeSet::new();
+                bset.insert(ity);
+                pairs.insert(pty, bset);
             }
         });
     pairs
+}
+
+fn construct_bounds_tokens(
+    pw_clause: Option<&WhereClause>,
+    ppairs: &PatternTypePairs,
+    errors: &mut ErrorStash,
+) -> TokenStream2 {
+    let mut bound_tokens = TokenStream2::new();
+    if let Some(where_cl) = pw_clause {
+        where_cl
+            .predicates
+            .iter()
+            .for_each(|predicate| match predicate {
+                syn::WherePredicate::Type(PredicateType {
+                    bounded_ty, bounds, ..
+                }) => {
+                    if let Some(pty_set) = ppairs.get(&bounded_ty.to_token_stream().to_string()) {
+                        pty_set.iter().for_each(|ty| {
+                            let ty = format_ident!("{}", ty);
+                            let ty_predicate = quote!(#ty: #bounds);
+                            bound_tokens = quote!(#bound_tokens #ty_predicate,)
+                        });
+                    }
+                }
+                _ => errors.extend(Span::call_site(), "Unsupported `where clause`"),
+            });
+    }
+    bound_tokens
 }
 
 type PatternTypePairs = BTreeMap<String, BTreeSet<String>>;
@@ -93,51 +117,30 @@ fn matcher(
     variant_pattern: &VariantPattern,
     variant: &Variant,
     errors: &mut ErrorStash,
-    source: &mut DeriveInput,
     wclause: &mut TokenStream2,
 ) {
-    match (&variant_pattern.variant.fields, &variant.fields) {
-        (Fields::Named(_pat_fields), Fields::Named(_item_fields)) => {}
-        (Fields::Unnamed(pat_fields), Fields::Unnamed(item_fields)) => {
-            if pat_fields.unnamed.len() == item_fields.unnamed.len() {
-                // e.g. `T -> [i32, f32]`, `U -> [String, usize, CustomStruct]
-                let ptype_pairs: PatternTypePairs =
-                    validate_and_collect(pat_fields, item_fields, errors);
-
-                if let Some(where_cl) = variant_pattern.where_clause.as_ref() {
-                    where_cl.predicates.iter().for_each(|predicate| {
-                        match predicate {
-                            syn::WherePredicate::Type(PredicateType {
-                                bounded_ty, bounds, ..
-                            }) => {
-                                if let Some(pty_set) =
-                                    ptype_pairs.get(&bounded_ty.to_token_stream().to_string())
-                                {
-                                    pty_set.iter().for_each(|ty| {
-                                        let ty = format_ident!("{}", ty);
-                                        let ty_predicate = quote!(#ty: #bounds);
-                                        *wclause = quote!(#wclause #ty_predicate,)
-                                    });
-                                }
-                            }
-                            _ => errors.extend(source.span(), "Unsupported where clause"),
-                        }
-                    });
-                }
-            } else {
-                errors.extend(
-                    variant.fields.span(),
-                    format!(
-                        "`{}` doesn't match pattern `{} {}`",
-                        variant.to_token_stream(),
-                        variant_pattern.variant.to_token_stream(),
-                        variant_pattern.where_clause.to_token_stream()
-                    ),
-                )
-            }
-        }
-        _ => errors.extend(variant.span(), "Variant doesn't match pattern"),
+    
+    let Some((pfields, ifields)) = (match (&variant_pattern.variant.fields, &variant.fields) {
+        (Fields::Named(pat_fields), Fields::Named(item_fields)) if pat_fields.named.len() == item_fields.named.len() => Some((&pat_fields.named, &item_fields.named)),
+        (Fields::Unnamed(pat_fields), Fields::Unnamed(item_fields)) if pat_fields.unnamed.len() == item_fields.unnamed.len() => Some((&pat_fields.unnamed, &item_fields.unnamed)),
+        _ => None,
+    }) else {
+        return errors.extend(
+            variant.fields.span(),
+            format!(
+                "`{}` doesn't match pattern `{}`",
+                variant.to_token_stream(),
+                variant_pattern.variant.to_token_stream()
+            ),
+        )
     };
+    // e.g. `T -> [i32, f32]`, `U -> [String, usize, CustomStruct]
+    let ptype_pairs: PatternTypePairs = validate_and_collect(pfields, ifields, errors);
+
+    let ty_predicate =
+    construct_bounds_tokens(variant_pattern.where_clause.as_ref(), &ptype_pairs, errors);
+
+    *wclause = quote!(#wclause #ty_predicate)
 }
 
 #[proc_macro_attribute]
@@ -162,24 +165,20 @@ pub fn shape(attr: TokenStream, input: TokenStream) -> TokenStream {
     let mut source = derived_input.clone();
     let mut wclause: TokenStream2 = TokenStream2::new();
 
-    enum_definition.variants.iter().for_each(|variant| {
-        matcher(
-            &variant_pattern,
-            variant,
-            &mut errors,
-            &mut source,
-            &mut wclause,
-        )
-    });
+    enum_definition
+        .variants
+        .iter()
+        .for_each(|variant| matcher(&variant_pattern, variant, &mut errors, &mut wclause));
 
     // TODO: Change this to optional later
     let where_clause: Punctuated<WherePredicate, Token![,]> = parse_quote!(#wclause);
 
-    println!("{}", source.to_token_stream());
     // TODO: Fix this shit
     errors.into_or(|| {
         if let Some(ref mut swc) = source.generics.where_clause {
-            where_clause.iter().for_each(|nwc| swc.predicates.push(nwc.clone()))
+            where_clause
+                .iter()
+                .for_each(|nwc| swc.predicates.push(nwc.clone()))
         } else {
             source.generics.where_clause = Some(parse_quote!(where #where_clause))
         }
