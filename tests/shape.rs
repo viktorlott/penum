@@ -20,18 +20,18 @@ enum Vector3 {
 enum Strategy<'a> {
     V1 { name: String, age: usize },
     V2 { name: usize, age: usize },
-    V3 { name: &'a str, age: usize }
+    V3 { name: &'a str, age: usize },
 }
 
 #[shape(concrete_over_name_and_age { name: &'a str, age: usize })]
 enum Concrete<'a> {
-    Static { name: &'a str, age: usize }
+    Static { name: &'a str, age: usize },
 }
 
 // #[shape(tuple(_))]
 // enum Must<'a> {
 //     Static { name: &'a str, age: usize }
-//             ^^^^^^^^^^^^^^^^^^^^^^^^^^^  
+//             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 //             `Static { name : & 'a str, age : usize }` doesn't match pattern `tuple(_)`
 // }
 
