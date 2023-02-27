@@ -1,30 +1,55 @@
 use std::{
-    borrow::Borrow,
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
 };
 
 use proc_macro::TokenStream;
-use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro2::{Span, TokenStream as TokenStream2, Ident};
 use quote::{format_ident, quote, ToTokens};
 use syn::{
-    parse::{self, Parse},
+    parse::{Parse,ParseStream},
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    Data, DeriveInput, Error, Fields, PredicateType, Token, Variant, WhereClause, WherePredicate,
+    Data, DeriveInput, Error, Fields, token, PredicateType, Token, Variant, WhereClause, WherePredicate,
 };
+
+type PatternItem = (Option<Ident>, Fields);
 
 /// name(T) where T : Hello
 struct VariantPattern {
-    variant: Variant,
+    #[allow(dead_code)]
+    pattern: Vec<PatternItem>,
     where_clause: Option<WhereClause>,
 }
 
+fn parse_fields(input: ParseStream) -> syn::Result<PatternItem> {
+    if input.peek(Token![$]) { 
+        let _: Token![$] = input.parse()?;
+    }
+    Ok((input.parse()?, if input.peek(token::Brace) {
+        Fields::Named(input.parse()?)
+    } else if input.peek(token::Paren) {
+        Fields::Unnamed(input.parse()?)
+    } else {
+        Fields::Unit
+    }))
+}
+
+fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatternItem>> {
+    let mut pattern = vec![input.call(parse_fields)?];
+    while input.peek(token::Or) {
+        let _: token::Or = input.parse()?;
+        pattern.push(input.call(parse_fields)?);
+    }
+  
+    Ok(pattern)
+}
+
 impl Parse for VariantPattern {
-    fn parse(input: parse::ParseStream) -> syn::Result<Self> {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(Self {
-            variant: input.parse()?,
+            pattern: input.call(parse_pattern)?,
             where_clause: input.parse()?,
         })
     }
@@ -54,34 +79,6 @@ fn string<T: ToTokens>(x: &T) -> String {
     x.to_token_stream().to_string()
 }
 
-fn validate_and_collect(
-    pat_fields: &Fields,
-    item_fields: &Fields,
-    ptype_pairs: &mut PatternTypePairs,
-    errors: &mut ErrorStash,
-) {
-    pat_fields
-        .into_iter()
-        .zip(item_fields.into_iter())
-        .for_each(|(pat, item)| {
-            let (pty, ity) = (string(&pat.ty), string(&item.ty));
-
-            let is_generic = pty.eq("_") || pty.to_uppercase().eq(&pty);
-
-            if !is_generic && pty != ity {
-                return errors.extend(item.ty.span(), format!("Found {ity} but expected {pty}."));
-            }
-
-            if let Some(set) = ptype_pairs.get_mut(&pty) {
-                set.insert(ity);
-            } else {
-                let mut bset = BTreeSet::new();
-                bset.insert(ity);
-                ptype_pairs.insert(pty, bset);
-            }
-        });
-}
-
 fn construct_bounds_tokens(
     pw_clause: Option<&WhereClause>,
     ppairs: &PatternTypePairs,
@@ -89,36 +86,36 @@ fn construct_bounds_tokens(
 ) -> TokenStream2 {
     let mut bound_tokens = TokenStream2::new();
     if let Some(where_cl) = pw_clause {
-        where_cl
-            .predicates
-            .iter()
-            .for_each(|predicate| match predicate {
-                syn::WherePredicate::Type(PredicateType {
-                    bounded_ty, bounds, ..
-                }) => {
-                    if let Some(pty_set) = ppairs.get(&bounded_ty.to_token_stream().to_string()) {
-                        pty_set.iter().for_each(|ty| {
-                            let ty = format_ident!("{}", ty);
-                            let ty_predicate = quote!(#ty: #bounds);
-                            bound_tokens = quote!(#bound_tokens #ty_predicate,)
-                        });
-                    }
+        for predicate in where_cl.predicates.iter() {
+            if let syn::WherePredicate::Type(PredicateType { bounded_ty, bounds, .. }) = predicate {
+                if let Some(pty_set) = ppairs.get(&bounded_ty.to_token_stream().to_string()) {
+                    pty_set.iter().for_each(|ty| {
+                        let ty = format_ident!("{}", ty);
+                        let ty_predicate = quote!(#ty: #bounds);
+                        bound_tokens = quote!(#bound_tokens #ty_predicate,)
+                    });
                 }
-                _ => errors.extend(Span::call_site(), "Unsupported `where clause`"),
-            });
+            } else {
+                errors.extend(Span::call_site(), "Unsupported `where clause`")
+            }
+           
+        }
     }
     bound_tokens
 }
 // e.g. `T -> [i32, f32]`, `U -> [String, usize, CustomStruct]
 type PatternTypePairs = BTreeMap<String, BTreeSet<String>>;
 fn matcher(
-    variant_pattern: &Variant,
+    fields_pattern: &Fields,
     variant_item: &Variant,
     ptype_pairs: &mut PatternTypePairs,
     errors: &mut ErrorStash,
 ) {
-    let Some((pfields, ifields)) = (match (&variant_pattern.fields, &variant_item.fields) {
-        value @ ((Fields::Named(_), Fields::Named(_)) | (Fields::Unnamed(_), Fields::Unnamed(_))) => Some(value),
+    let Some((pfields, ifields)) = (match (&fields_pattern, &variant_item.fields) {
+        value @ (
+            (Fields::Named(_), Fields::Named(_)) | 
+            (Fields::Unnamed(_), Fields::Unnamed(_))
+        ) if value.0.len() == value.1.len() => Some(value),
         _ => None,
     }) else {
         return errors.extend(
@@ -126,12 +123,25 @@ fn matcher(
             format!(
                 "`{}` doesn't match pattern `{}`",
                 variant_item.to_token_stream(),
-                variant_pattern.to_token_stream()
+                fields_pattern.to_token_stream()
             ),
         )
     };
 
-    validate_and_collect(pfields.borrow(), ifields.borrow(), ptype_pairs, errors)
+    for (pat, item) in pfields.into_iter().zip(ifields.into_iter()) {
+        let (pty, ity) = (string(&pat.ty), string(&item.ty));
+        let is_generic = pty.eq("_") || pty.to_uppercase().eq(&pty);
+
+        if !is_generic && pty != ity {
+            return errors.extend(item.ty.span(), format!("Found {ity} but expected {pty}."));
+        }
+
+        if let Some(set) = ptype_pairs.get_mut(&pty) {
+            set.insert(ity);
+        } else {
+            ptype_pairs.insert(pty, vec![ity].into_iter().collect());
+        }
+    }
 }
 
 #[proc_macro_attribute]
@@ -157,14 +167,16 @@ pub fn shape(attr: TokenStream, input: TokenStream) -> TokenStream {
     let mut ptype_pairs: PatternTypePairs = PatternTypePairs::new();
     let mut errors: ErrorStash = ErrorStash(None);
 
-    enum_definition.variants.iter().for_each(|variant| {
+    let pattern = variant_pattern.pattern.get(0).unwrap();
+
+    for variant in enum_definition.variants.iter() {
         matcher(
-            &variant_pattern.variant,
+            &pattern.1,
             variant,
             &mut ptype_pairs,
             &mut errors,
         )
-    });
+    }
 
     let ty_predicate = construct_bounds_tokens(
         variant_pattern.where_clause.as_ref(),
