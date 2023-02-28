@@ -6,14 +6,16 @@ use std::{
 
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
+use quote::format_ident;
 use quote::ToTokens;
-use quote::{format_ident, quote};
 use syn::{
     parse::{Parse, ParseStream},
     parse_quote,
-    punctuated::Punctuated,
     spanned::Spanned,
-    token, DeriveInput, Error, Fields, PredicateType, Token, Variant, WhereClause, WherePredicate,
+    token::{self},
+    DeriveInput, Error,
+    Fields::{self, Named, Unnamed},
+    Token, Variant, WhereClause, WherePredicate,
 };
 pub type PatternItem = (Option<Ident>, Fields);
 pub type PatternTypePairs = BTreeMap<String, BTreeSet<String>>;
@@ -48,60 +50,60 @@ impl State {
             .matcher(variant_item, &mut self.types, &mut self.error)
     }
     pub fn collect_tokens(mut self) -> TokenStream {
-        let mut bound_tokens = TokenStream2::new();
-        if let Some(where_cl) = self.shape.where_clause.as_ref() {
-            for predicate in where_cl.predicates.iter() {
-                if let syn::WherePredicate::Type(PredicateType {
-                    bounded_ty, bounds, ..
-                }) = predicate
-                {
-                    if let Some(pty_set) = self.types.get(&bounded_ty.to_token_stream().to_string())
-                    {
-                        for ty in pty_set.iter() {
-                            let ty = format_ident!("{}", ty);
-                            let ty_predicate = quote!(#ty: #bounds);
-                            bound_tokens = quote!(#bound_tokens #ty_predicate,)
-                        }
-                    }
-                } else {
-                    self.error
-                        .extend(Span::call_site(), "Unsupported `where clause`")
-                }
-            }
-        }
+        let bound_tokens = self.link_bounds();
+
         // TODO: Fix this shit
         if let Some(ref error) = self.error.0 {
             error.to_compile_error().into()
-        } else if let Some(ref mut swc) = self.input.generics.where_clause {
-            // TODO: Change this to optional later
-            let where_clause: Punctuated<WherePredicate, Token![,]> = parse_quote!(#bound_tokens);
-            for nwc in where_clause.iter() {
-                swc.predicates.push(nwc.clone())
-            }
-            self.input.to_token_stream().into()
         } else {
-            self.input.generics.where_clause = Some(parse_quote!(where #bound_tokens));
+            self.extend_where_clause(&bound_tokens);
             self.input.to_token_stream().into()
         }
+    }
+
+    fn link_bounds(&mut self) -> Vec<TokenStream2> {
+        let mut bound_tokens = Vec::new();
+        if let Some(where_cl) = self.shape.where_clause.as_ref() {
+            for predicate in where_cl.predicates.iter() {
+                match predicate {
+                    WherePredicate::Type(pred) => {
+                        if let Some(pty_set) = self.types.get(&string(&pred.bounded_ty)) {
+                            pty_set
+                                .iter()
+                                .map(|ident| (format_ident!("{}", ident), &pred.bounds))
+                                .for_each(|(ident, bound)| bound_tokens.push(parse_quote!(#ident: #bound)))
+                        }
+                    }
+                    _ => self
+                        .error
+                        .extend(Span::call_site(), "Unsupported `where clause`"),
+                }
+            }
+        }
+        bound_tokens
+    }
+
+    fn extend_where_clause(&mut self, bounds: &[TokenStream2]) {
+        bounds.iter().for_each(|bound| {
+            self.input
+                .generics
+                .where_clause
+                .get_or_insert_with(|| parse_quote!(where))
+                .predicates
+                .push(parse_quote!(#bound))
+        })
     }
 }
 
 impl VariantPattern {
     fn pattern<'a>(&'a self, variant_item: &'a Variant) -> Option<(&'a Fields, &'a Fields)> {
-        let pattern = &self.pattern.get(0).unwrap().1;
-        if let value = match (pattern, &variant_item.fields) {
-            value @ ((Fields::Named(_), Fields::Named(_))
-            | (Fields::Unnamed(_), Fields::Unnamed(_)))
-                if value.0.len() == value.1.len() =>
-            {
-                Some((value.0, value.1))
-            }
-            _ => None,
-        } {
-            value
-        } else {
-            None
-        }
+        self.pattern
+            .iter()
+            .find_map(|(_, pattern)| match (pattern, &variant_item.fields) {
+                value @ ((Named(_), Named(_)) | (Unnamed(_), Unnamed(_)))
+                    if value.0.len() == value.1.len() => Some(value),
+                _ => None,
+            })
     }
     fn matcher(
         &self,
@@ -116,7 +118,10 @@ impl VariantPattern {
                     "`{}` doesn't match pattern `{}`",
                     variant_item.to_token_stream(),
                     // Fix this shit
-                    self.pattern.get(0).unwrap().1.to_token_stream()
+                    self.pattern
+                        .iter()
+                        .map(|(_, f)| f.to_token_stream().to_string())
+                        .reduce(|acc, s| if acc.is_empty() {s} else {format!("{acc} | {s}")}).unwrap()
                 ),
             );
         };

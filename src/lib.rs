@@ -6,7 +6,7 @@ use syn::{
 };
 
 mod attribute;
-
+mod utils;
 use attribute::{VariantPattern, State};
 
 
