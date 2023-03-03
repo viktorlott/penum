@@ -1,5 +1,3 @@
-#![allow(irrefutable_let_patterns)]
-
 use proc_macro2::{Ident, TokenStream};
 use quote::ToTokens;
 use syn::{
@@ -55,18 +53,13 @@ impl Parse for Subject {
     }
 }
 
-
 impl ToTokens for Subject {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        fn is_outer(attr: &&Attribute) -> bool {
-            match attr.style {
-                AttrStyle::Outer => true,
-                AttrStyle::Inner(_) => false,
-            }
-        }
-        for attr in self.attrs.iter().filter(is_outer) {
-            attr.to_tokens(tokens);
-        }
+        self.attrs
+            .iter()
+            .filter(is_outer)
+            .for_each(|attr| attr.to_tokens(tokens));
+
         self.vis.to_tokens(tokens);
         self.data.enum_token.to_tokens(tokens);
         self.ident.to_tokens(tokens);
@@ -77,5 +70,13 @@ impl ToTokens for Subject {
             self.data.variants.to_tokens(tokens);
         });
         
+    }
+}
+
+#[inline(always)]
+fn is_outer(attr: &&Attribute) -> bool {
+    match attr.style {
+        AttrStyle::Outer => true,
+        AttrStyle::Inner(_) => false,
     }
 }

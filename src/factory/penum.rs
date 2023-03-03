@@ -1,4 +1,3 @@
-#![allow(irrefutable_let_patterns)]
 use std::marker::PhantomData;
 
 use proc_macro::TokenStream;

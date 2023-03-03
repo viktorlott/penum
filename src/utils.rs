@@ -1,4 +1,3 @@
-#![allow(irrefutable_let_patterns)]
 use std::collections::{BTreeMap, BTreeSet};
 
 use proc_macro2::{Ident};

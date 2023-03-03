@@ -1,4 +1,3 @@
-#![allow(irrefutable_let_patterns)]
 use quote::ToTokens;
 use syn::{
     parse::{Parse, ParseStream},
