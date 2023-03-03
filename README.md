@@ -1,11 +1,11 @@
 # penum
 
-Enforce enum patterns that must be followed
+[<img alt="github" src="https://img.shields.io/github/languages/code-size/viktorlott/typed?style=flat-square&logo=github" height="20">](https://github.com/viktorlott/penum)
+[<img alt="crates.io" src="https://img.shields.io/crates/v/dismantler?style=flat-square&logo=rust" height="20">](https://crates.io/crates/penum)
+
+Enforce patterns for enums
 
 ```rust
-#![allow(dead_code)]
-extern crate penum;
-
 use penum::shape;
 
 trait Trait {}
@@ -32,7 +32,10 @@ enum Strategy<'a> {
 enum Concrete<'a> {
     Static { name: &'a str, age: usize },
 }
+```
 
+
+```rust
 #[shape[tuple(_)]]
 enum Must<'a> {
     Static { name: &'a str, age: usize }
@@ -45,12 +48,5 @@ enum Must<'a> {
 `the trait bound `usize: Trait` is not satisfied`
 enum Must {
     Static (usize)
-}
-
-fn main() {
-    match Vector3::Integer(10, 10.0, 10) {
-        Vector3::Integer(num, _, _) => num,
-        Vector3::Float(num, _, _) => num as i32,
-    };
 }
 ```
