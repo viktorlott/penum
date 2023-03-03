@@ -1,6 +1,6 @@
 # penum
 
-A shitty enum enforcer
+Enforce enum patterns that must be followed
 
 ```rust
 #![allow(dead_code)]

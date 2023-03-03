@@ -2,6 +2,13 @@
 name = "penum"
 version = "0.1.0"
 edition = "2021"
+description = "Enforce enum patterns that must be followed"
+license = "MIT OR Apache-2.0"
+keywords = ["enum", "pattern", "shape", "macro", "proc-macro"]
+authors = ["Viktor Lott"]
+categories = ["development-tools::procedural-macro-helpers"]
+repository = "https://github.com/viktorlott/penum"
+
 
 [lib]
 proc-macro = true
