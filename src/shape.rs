@@ -8,7 +8,7 @@ use syn::{
     Variant, WhereClause 
 };
 
-use crate::{error::ErrorStash, utils::{PatternItem, PatternTypePairs, parse_pattern, string}};
+use crate::{error::ErrorStash, utils::{PatternItem, MatchedPatterns, parse_pattern, string}};
 
 pub struct Shape {
     /// name(T) where T : Hello
@@ -39,7 +39,7 @@ impl Shape {
     pub fn validate_and_collect(
         &self,
         variant_item: &Variant,
-        ptype_pairs: &mut PatternTypePairs,
+        ptype_pairs: &mut MatchedPatterns,
         errors: &mut ErrorStash,
     ) {
         let Some((pfields, ifields)) = self.pattern(variant_item) else {

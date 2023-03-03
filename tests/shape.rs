@@ -1,7 +1,7 @@
 #![allow(dead_code)]
-extern crate enpat;
+extern crate penum;
 
-use enpat::shape;
+use penum::shape;
 
 trait Trait {}
 impl Trait for f32 {}

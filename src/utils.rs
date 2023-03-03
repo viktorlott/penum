@@ -1,8 +1,5 @@
 #![allow(irrefutable_let_patterns)]
-use std::{
-    collections::{BTreeMap, BTreeSet},
-};
-
+use std::collections::{BTreeMap, BTreeSet};
 
 use proc_macro2::{Ident};
 
@@ -15,7 +12,7 @@ use syn::{
 };
 
 pub type PatternItem = (Option<Ident>, Fields);
-pub type PatternTypePairs = BTreeMap<String, BTreeSet<String>>;
+pub type MatchedPatterns = BTreeMap<String, BTreeSet<String>>;
 
 pub fn parse_fields(input: ParseStream) -> syn::Result<PatternItem> {
     if input.peek(Token![$]) {
@@ -35,6 +32,7 @@ pub fn parse_fields(input: ParseStream) -> syn::Result<PatternItem> {
 
 pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatternItem>> {
     let mut pattern = vec![input.call(parse_fields)?];
+
     while input.peek(token::Or) {
         let _: token::Or = input.parse()?;
         pattern.push(input.call(parse_fields)?);
@@ -42,8 +40,6 @@ pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatternItem>> {
 
     Ok(pattern)
 }
-
-
 
 pub fn parse_enum(
     input: ParseStream,
