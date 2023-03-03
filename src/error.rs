@@ -1,13 +1,13 @@
 use std::fmt::Display;
 
 use proc_macro2::{Span, TokenStream};
-use syn::{Error};
+use syn::Error;
 
 #[derive(Default)]
-pub struct ErrorStash(Option<Error>);
+pub struct Diagnostic(Option<Error>);
 
 
-impl ErrorStash {
+impl Diagnostic {
     pub fn extend(&mut self, span: Span, error: impl Display) {
         if let Some(err) = self.0.as_mut() {
             err.combine(Error::new(span, error));

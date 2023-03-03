@@ -11,10 +11,10 @@ use syn::{
     Token, WhereClause, punctuated::Punctuated, Variant, braced
 };
 
-pub type PatternItem = (Option<Ident>, Fields);
-pub type MatchedPatterns = BTreeMap<String, BTreeSet<String>>;
+pub type Shape = (Option<Ident>, Fields);
+pub type TypeMap = BTreeMap<String, BTreeSet<String>>;
 
-pub fn parse_fields(input: ParseStream) -> syn::Result<PatternItem> {
+pub fn parse_fields(input: ParseStream) -> syn::Result<Shape> {
     if input.peek(Token![$]) {
         let _: Token![$] = input.parse()?;
     }
@@ -30,7 +30,7 @@ pub fn parse_fields(input: ParseStream) -> syn::Result<PatternItem> {
     ))
 }
 
-pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatternItem>> {
+pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<Shape>> {
     let mut pattern = vec![input.call(parse_fields)?];
 
     while input.peek(token::Or) {
