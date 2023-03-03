@@ -1,4 +1,6 @@
-# enum_shape
+# penum
+
+A shitty enum enforcer
 
 ```rust
 #![allow(dead_code)]
