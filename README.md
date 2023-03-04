@@ -1,15 +1,29 @@
 # penum
 
-[<img alt="github" src="https://img.shields.io/github/languages/code-size/viktorlott/penum?style=flat-square&logo=github" height="20">](https://github.com/viktorlott/penum)
-[<img alt="crates.io" src="https://img.shields.io/crates/v/penum?style=flat-square&logo=rust" height="20">](https://crates.io/crates/penum)
-
 `penum` is a procedural macro that is used to make an enum follow a given pattern, which can include generics with trait bounds.
+
+[<img alt="Github" src="https://img.shields.io/github/languages/code-size/viktorlott/penum?style=flat-square&logo=github" height="20">](https://github.com/viktorlott/penum)
+[<img alt="Download" src="https://img.shields.io/crates/d/penum.svg?style=flat-square" height="20">](https://github.com/viktorlott/penum)
+[<img alt="crates.io" src="https://img.shields.io/crates/v/penum.svg?style=flat-square&logo=rust" height="20">](https://crates.io/crates/penum)
+
 
 A `pattern` consists of one or more `shapes` and an optional `where clause`, which will autobind the concrete types specified for you.
   - `shape` can either be `Named`, `Unnamed` or `Unit`, and are used to validate variants.
   - `where clause` are used to bind the generic parameters to traits.
 
-### Use case
+### Future support
+- Discriminants
+- Static dispatch (i.e auto impl for `std` traits)
+- Spread operator
+
+## Installation
+This crate is available on [crates.io](https://crates.io/crates/penum) and can be used by adding the following to your project's Cargo.toml:
+```toml
+[dependencies]
+penum = "0.1.3"
+```
+
+## Use case
 Normally, using a generic in an enum means that it gets applied to the whole enum, and not per variant. 
 For example, if I want to specify that all variants should be a `tuple(T)` where T must implement `Copy`, 
 I'd have to specify a generic for all variants:
@@ -35,7 +49,7 @@ enum Foo {
 ```
 ..which would expand to the first example above.
 
-### Examples
+## Examples
 There are much more one could do with this, for example, one could specify that an enum should follow a pattern 
 with multiple different shapes:
 ```rust
@@ -74,12 +88,8 @@ enum Foo {
 }
 ```
 
-### Future support
-- Discriminants
-- Static dispatch (i.e auto impl for `std` traits)
-- Spread operator
 
-### Demo
+## Demo
 ```rust
 use penum::shape;
 
