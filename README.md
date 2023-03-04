@@ -1,20 +1,19 @@
 # penum
 
-`penum` is a procedural macro that is used to make an enum follow a given pattern, which can include generics with trait bounds.
-
 [<img alt="Github" src="https://img.shields.io/github/languages/code-size/viktorlott/penum?style=flat-square&logo=github" height="20">](https://github.com/viktorlott/penum)
 [<img alt="Download" src="https://img.shields.io/crates/d/penum.svg?style=flat-square" height="20">](https://github.com/viktorlott/penum)
 [<img alt="crates.io" src="https://img.shields.io/crates/v/penum.svg?style=flat-square&logo=rust" height="20">](https://crates.io/crates/penum)
 
-
+## Overview
+`penum` is a procedural macro that is used to make an enum follow a given pattern, which can include generics with trait bounds.
 A `pattern` consists of one or more `shapes` and an optional `where clause`, which will autobind the concrete types specified for you.
   - `shape` can either be `Named`, `Unnamed` or `Unit`, and are used to validate variants.
-  - `where clause` are used to bind the generic parameters to traits.
+  - `where` clause is used to bind the generic parameters to traits.
 
-### Future support
+#### Future support
 - Discriminants
-- Static dispatch (i.e auto impl for `std` traits)
-- Spread operator
+- Static dispatch i.e. auto impl `std` traits
+- Spread operator i.e. (T, U, ..)
 
 ## Installation
 This crate is available on [crates.io](https://crates.io/crates/penum) and can be used by adding the following to your project's Cargo.toml:
@@ -50,7 +49,7 @@ enum Foo {
 ..which would expand to the first example above.
 
 ## Examples
-There are much more one could do with this, for example, one could specify that an enum should follow a pattern 
+There's much more one could do with this, for example, one could specify that an enum should follow a pattern 
 with multiple different shapes:
 ```rust
 #[shape[ (T) | (T, T) | { number: T } where T: Copy ]]
