@@ -8,6 +8,7 @@
 A `pattern` consists of one or more `shapes` and an optional `where clause`, which will autobind the concrete types specified for you.
   - `shape` can either be `Named`, `Unnamed` or `Unit`, and are used to validate variants.
   - `where clause` are used to bind the generic parameters to a traits.
+
   
 Normally, using a generic in an enum means that it gets applied to the whole enum, and not per variant. 
 For example, if I want to specify that all variants should be a `tuple(T)` where T must implement `Copy`, 
@@ -49,7 +50,8 @@ enum Foo {
 }
 ```
 
-Also, If an enum should break a pattern, then an error will occur:
+Also, If an enum should break a `pattern`, like if a variant doesn't implement the correct `Trait`,
+an error would occur:
 ```rust
 #[shape[ (T) | (T, T) | { number: T } where T: Copy ]]
 enum Foo {
@@ -58,7 +60,7 @@ enum Foo {
        ERROR: `String` doesn't implement `Copy`
 }
 ```
-
+..or if a variant doesn't match the specified `shape`:
 ```rust
 #[shape[ (T) | (T, T) | { number: T } where T: Copy ]]
 enum Foo {
@@ -68,6 +70,19 @@ enum Foo {
 }
 ```
 
+Sometime we don't care about specifying a `where clause` and just want our enum to follow a specific `shape`.
+This is done by specifing `_`:
+```rust
+#[shape[ (_) | (_, _) | { number: _ } ]]
+enum Foo {
+    Bar(u32), Ber(u32, i32, i32), Bur { number: f32 },
+}
+```
+
+### Future support
+- Discriminants
+- Static dispatch (i.e auto impl for `std` traits)
+- Spread operator
 
 # Examples
 ```rust
@@ -99,7 +114,6 @@ enum Concrete<'a> {
 }
 ```
 
-
 ```rust
 #[shape[tuple(_)]]
 enum Must<'a> {
@@ -116,6 +130,3 @@ enum Must {
 }
 ```
 
-## Future support
-- Discriminants
-- Implement
