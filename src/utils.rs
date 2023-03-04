@@ -1,43 +1,35 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use proc_macro2::{Ident};
-
 use quote::ToTokens;
 use syn::{
     parse::{Parse, ParseStream},
     token::{self},
-    Fields,
-    Token, WhereClause, punctuated::Punctuated, Variant, braced
+    Token, WhereClause, punctuated::Punctuated, Variant, braced,
 };
 
-pub type Shape = (Option<Ident>, Fields);
+use crate::factory::Shape;
+
 pub type TypeMap = BTreeMap<String, BTreeSet<String>>;
 
-pub fn parse_fields(input: ParseStream) -> syn::Result<Shape> {
-    if input.peek(Token![$]) {
-        let _: Token![$] = input.parse()?;
-    }
-    Ok((
-        input.parse()?,
-        if input.peek(token::Brace) {
-            Fields::Named(input.parse()?)
-        } else if input.peek(token::Paren) {
-            Fields::Unnamed(input.parse()?)
-        } else {
-            Fields::Unit
-        },
-    ))
-}
-
-pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<Shape>> {
-    let mut pattern = vec![input.call(parse_fields)?];
+pub fn parse_shapes(input: ParseStream) -> syn::Result<Vec<Shape>> {
+    let mut shape = vec![input.call(parse_shape)?];
 
     while input.peek(token::Or) {
         let _: token::Or = input.parse()?;
-        pattern.push(input.call(parse_fields)?);
+        shape.push(input.call(parse_shape)?);
     }
 
-    Ok(pattern)
+    Ok(shape)
+}
+
+pub fn parse_shape(input: ParseStream) -> syn::Result<Shape> {
+    if input.peek(Token![$]) {
+        let _: Token![$] = input.parse()?;
+    }
+    Ok(Shape {
+        ident: input.parse()?,
+        scope: input.parse()?
+    })
 }
 
 pub fn parse_enum(

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 extern crate penum;
 
-use penum::shape;
+use penum::penum;
 
 trait Trait {}
 impl Trait for f32 {}
@@ -10,34 +10,40 @@ impl Trait for i32 {}
 trait Advanced {}
 impl Advanced for usize {}
 
-#[shape[(T, T, U) | (T, U) | { name: T } where T: Trait, U: Advanced]]
+#[penum[(T, T, U) | (T, U) | { name: T } where T: Trait, U: Advanced]]
 enum Vector3 {
     Integer(i32, f32, usize),
     Float(f32, i32, usize),
 }
 
-#[shape[{ name: _, age: usize } where usize: Advanced]]
+#[penum[{ name: _, age: usize } where usize: Advanced]]
 enum Strategy<'a> {
     V1 { name: String, age: usize },
     V2 { name: usize, age: usize },
     V3 { name: &'a str, age: usize },
 }
 
-#[shape[{ name: &'a str, age: usize }]]
+#[penum[{ name: &'a str, age: usize }]]
 enum Concrete<'a> {
     Static { name: &'a str, age: usize },
 }
 
-// #[shape[tuple(_)]]
+
+#[penum[(T, U, ..) where T: Trait, U: Advanced]]
+enum Variadic {
+    V1(i32, usize, String, u8, u16),
+}
+
+// #[penum[tuple(_)]]
 // enum Must<'a> {
 //     Static { name: &'a str, age: usize }
-//             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-//             `Static { name : & 'a str, age : usize }` doesn't match pattern `tuple(_)`
+//         // ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+//         // `Static { name : & 'a str, age : usize }` doesn't match pattern `tuple(_)`
 // }
 
-// #[shape[tuple(T) where T: Trait]]
-//   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-// `the trait bound `usize: Trait` is not satisfied`
+// #[penum[tuple(T) where T: Trait]]
+// // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// // `the trait bound `usize: Trait` is not satisfied`
 // enum Must {
 //     Static (usize)
 // }
