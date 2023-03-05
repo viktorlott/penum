@@ -4,12 +4,12 @@ use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::format_ident;
 use quote::ToTokens;
-use syn::{parse_quote, spanned::Spanned, WherePredicate, Error};
+use syn::{parse_quote, spanned::Spanned, Error, WherePredicate};
 
 use crate::{
     error::Diagnostic,
+    factory::{pattern::Pattern, subject::Subject},
     utils::{string, TypeMap},
-    factory::{pattern::Pattern, subject::Subject}
 };
 
 pub struct Disassembled;
@@ -43,11 +43,10 @@ impl Penum<Disassembled> {
                 "Expected to find at least one variant.",
             );
         } else {
-            enum_data.variants
-                .iter()
-                .for_each(|variant_item| self.pattern
+            enum_data.variants.iter().for_each(|variant_item| {
+                self.pattern
                     .validate_and_collect(variant_item, &mut self.types, &mut self.error)
-                );
+            });
         }
 
         // SAFETY: Transmuting Self into Self with a different ZST is safe.
@@ -77,7 +76,7 @@ impl Penum<Assembled> {
 
         &self.subject
     }
-    
+
     fn link_bounds(self: &mut Penum<Assembled>) -> Vec<TokenStream2> {
         let mut bound_tokens = Vec::new();
         if let Some(where_cl) = self.pattern.where_clause.as_ref() {
@@ -102,4 +101,3 @@ impl Penum<Assembled> {
         bound_tokens
     }
 }
-

@@ -40,7 +40,7 @@ pub enum Scope {
 }
 
 // TODO: Variadic should be with 3 dots?
-/// 
+///
 /// ```rust
 ///     (T, U)
 ///     (T, U, ..)
@@ -202,13 +202,16 @@ impl Scope {
 
     pub fn count_by_include(&self, mut f: impl FnMut(&FieldKind) -> bool) -> usize {
         match self {
-            Named(n, _) => n.iter().fold(0, |acc, fk| if f(fk) { acc + 1 } else { acc }),
-            Unnamed(u, _) => u.iter().fold(0, |acc, fk| if f(fk) { acc + 1 } else { acc }),
+            Named(n, _) => n
+                .iter()
+                .fold(0, |acc, fk| if f(fk) { acc + 1 } else { acc }),
+            Unnamed(u, _) => u
+                .iter()
+                .fold(0, |acc, fk| if f(fk) { acc + 1 } else { acc }),
             Unit => 0,
         }
     }
 }
-
 
 impl IntoIterator for Scope {
     type Item = FieldKind;
@@ -320,7 +323,7 @@ trait PatternMatcher {
     fn has_variadic(&self) -> bool {
         matches!(self.get_matches(), (p, _) if p.has_variadic())
     }
-    
+
     fn has_variadic_last(&self) -> bool {
         matches!(self.get_matches(), (p, _) if p.last_is_variadic())
     }

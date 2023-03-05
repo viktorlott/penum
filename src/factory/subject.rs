@@ -2,12 +2,10 @@ use proc_macro2::{Ident, TokenStream};
 use quote::ToTokens;
 use syn::{
     parse::{Parse, ParseStream},
-    DataEnum,
-    Token, Attribute, Visibility, Generics,
-    AttrStyle,
+    AttrStyle, Attribute, DataEnum, Generics, Token, Visibility,
 };
 
-use crate::utils::{parse_enum};
+use crate::utils::parse_enum;
 
 pub struct Subject {
     pub attrs: Vec<Attribute>,
@@ -33,20 +31,20 @@ impl Parse for Subject {
                 where_clause,
                 ..generics
             };
-            
+
             let data = DataEnum {
                 enum_token,
                 brace_token: brace,
                 variants,
             };
 
-             Ok(Subject {
-                    attrs,
-                    vis,
-                    ident,
-                    generics,
-                    data
-                })   
+            Ok(Subject {
+                attrs,
+                vis,
+                ident,
+                generics,
+                data,
+            })
         } else {
             Err(lookahead.error())
         }
@@ -69,7 +67,6 @@ impl ToTokens for Subject {
         self.data.brace_token.surround(tokens, |tokens| {
             self.data.variants.to_tokens(tokens);
         });
-        
     }
 }
 

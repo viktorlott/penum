@@ -28,7 +28,6 @@ enum Concrete<'a> {
     Static { name: &'a str, age: usize },
 }
 
-
 #[penum[(T, U, ..) where T: Trait, U: Advanced]]
 enum Variadic {
     V1(i32, usize, String, u8, u16),

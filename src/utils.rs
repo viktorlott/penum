@@ -2,9 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use quote::ToTokens;
 use syn::{
+    braced,
     parse::{Parse, ParseStream},
+    punctuated::Punctuated,
     token::{self},
-    Token, WhereClause, punctuated::Punctuated, Variant, braced,
+    Token, Variant, WhereClause,
 };
 
 use crate::factory::Shape;
@@ -28,7 +30,7 @@ pub fn parse_shape(input: ParseStream) -> syn::Result<Shape> {
     }
     Ok(Shape {
         ident: input.parse()?,
-        scope: input.parse()?
+        scope: input.parse()?,
     })
 }
 
