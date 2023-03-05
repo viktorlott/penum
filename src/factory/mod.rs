@@ -1,4 +1,4 @@
-use syn::{Fields, Token, punctuated::Punctuated};
+use syn::{punctuated::Punctuated, Fields, Token};
 
 mod pattern;
 mod penum;

@@ -16,7 +16,7 @@ use crate::{
     utils::{parse_shapes, string, TypeMap},
 };
 
-use super::{PunctuatedFieldKinds, pattern_match};
+use super::{pattern_match, PunctuatedFieldKinds};
 
 use Scope::*;
 
@@ -311,4 +311,3 @@ impl Pattern {
         }
     }
 }
-
