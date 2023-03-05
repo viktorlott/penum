@@ -5,10 +5,14 @@
 <div align="center">
     <a href="https://github.com/viktorlott/penum">
         <img alt="Github" src="https://img.shields.io/github/languages/code-size/viktorlott/penum?style=flat-square&logo=github" height="20">
-        <img alt="Download" src="https://img.shields.io/crates/d/penum.svg?style=flat-square" height="20">
+        <img alt="Download" src="https://img.shields.io/crates/d/penum.svg?style=flat-square&logo=rust" height="20">
+        <img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/viktorlott/penum/test.yaml?branch=main&style=flat-square&logo=github">
     </a>
     <a href="https://crates.io/crates/penum">
         <img alt="crates.io" src="https://img.shields.io/crates/v/penum.svg?style=flat-square&logo=rust" height="20">
+    </a>
+    <a href="https://docs.rs/penum/latest/penum/">
+        <img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-penum-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">
     </a>
 </div>
 
