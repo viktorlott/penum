@@ -82,8 +82,7 @@ enum Dispached {
 }
 ```
 
-
-#### Introduce new syntax 
+### Introduce new syntax 
 
 Might want to introduce a symbol marker that indicates if something should be dispachable.
 I'm thinking about `^` being that symbol. But I don't know if it should be inside a shape
@@ -106,14 +105,4 @@ would be difficult to know which one should be dispached..
 //   be dispachable; and even if another generic also has the same trait bound, it won't be considered 
 //   dispachable because it's not marked with `^`.
 #[penum( (T) | (T,  U) where  T: ^Trait + Tiart, U: Trait )]
-```
-
-
-I don't know if this is even worth focusing on right now, but this might be 
-interesting to think of in the future.
-```rust
-#[penum {
-    bound = T: Trait, U: Trait;
-    shape = (T) | (T, _) | (_, U) | { ident: T };
-}]
 ```
