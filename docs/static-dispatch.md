@@ -12,7 +12,7 @@ Terminology:
 
 First of all, there are some questions about what can be considered dispatchable.
 
-When we have `shapes` of arity one, we don't have any problems knowing what field is dispatchable, because
+When we have `group` of arity one, we don't have any problems knowing what field is dispatchable, because
 there is only one possible candidate. But any other arity, even a nullary, can give us some problem because there 
 can be disputes about which field should be considered for dispatch.
 
@@ -40,9 +40,9 @@ struct Eva;
 impl Trait for Adam {}
 impl Trait for Eva {}
 
-// NOTE: When Penum tries to match a variant with a shape, it does so by partial order.
+// NOTE: When Penum tries to match a variant with a pattern fragment, it does so by partial order.
 #[penum( 
-    // # Any shape that is of arity one (unary variants) won't have any problems 
+    // # Any pattern fragment that is of arity one (unary variants) won't have any problems 
     //   getting added as a `dispatchelor`. They are the only candidate we have..
     (T) | { name: T } |
 
@@ -69,13 +69,13 @@ impl Trait for Eva {}
     (_, T) | 
 
     // # Here we have a tuple containing two generic params.
-    //   This one is tricky, because I don't know if this shape even can be matched given 
-    //   the previous shape. This is because Penum has a partial match order, and because
+    //   This one is tricky, because I don't know if this pattern fragment even can be matched given 
+    //   the previous pattern fragment. This is because Penum has a partial match order, and because
     //   `_` is a wildcard, it will catch all variants that also will match this one.
     (T, U) |
 
     // # Here we have a struct containing two generic params.
-    //   This shape should not have the same problem as the shape above. Here we actually 
+    //   This pattern fragment should not have the same problem as the pattern fragment above. Here we actually 
     //   know that these two fields will be in a dispute, before any variants are present.
     //   To be able to choose a `dispatchelor`, one would have to ask the arbitor.
     { a: T, b: U }
@@ -93,13 +93,13 @@ enum dispatched {
 ### Introduce new syntax 
 
 Introducing a symbol marker that is used to mark traits as dispachable.
-I'm thinking about `^` being that symbol. But I don't know if it should be inside a shape
+I'm thinking about `^` being that symbol. But I don't know if it should be inside a pattern fragment
 or where clause. It would make more sense to have it in the where clause for a trait than 
-for a generic param in a shape. This is because a generic param could have multiple traits 
+for a generic param in a pattern fragment. This is because a generic param could have multiple traits 
 and then it would be difficult to know which one should be dispatched..
 
 
-1. This feels weird because we would have to declare it for every shape, making it tedius because we would have to then also mark `(T)` as dispatchable. 
+1. This feels weird because we would have to declare it for every pattern fragment, making it tedius because we would have to then also mark `(T)` as dispatchable. 
    ```rust
    #[penum( (T) | (^T, U) where  T:  Trait + Tiart, U: Trait )]
    ```

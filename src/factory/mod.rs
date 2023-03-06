@@ -8,13 +8,11 @@ pub use pattern::*;
 pub use penum::*;
 pub use subject::*;
 
-use Scope::*;
-
-pub type PunctuatedFieldKinds = Punctuated<FieldKind, Token![,]>;
+pub type PunctuatedParameters = Punctuated<Parameter, Token![,]>;
 
 // TODO: Change this sh*t, or add some
 pub trait PatternMatcher {
-    fn get_matches(&self) -> (&Scope, &Fields);
+    fn get_matches(&self) -> (&Group, &Fields);
 
     fn has_same_len(&self) -> bool {
         matches!(self.get_matches(), (p, i) if p.len() == i.len())
@@ -25,27 +23,26 @@ pub trait PatternMatcher {
     }
 
     fn has_variadic_last(&self) -> bool {
-        matches!(self.get_matches(), (p, _) if p.last_is_variadic())
+        matches!(self.get_matches(), (p, _) if p.has_last_variadic())
     }
 
     fn has_minimum_matches(&self) -> bool {
-        matches!(self.get_matches(), (p, i) if p.count_by_include(|fk| fk.is_field()) <= i.len())
+        matches!(self.get_matches(), (p, i) if p.count_with(|fk| fk.is_field()) <= i.len())
     }
 }
 
-impl<'a> PatternMatcher for (&'a Scope, &'a Fields) {
-    fn get_matches(&self) -> (&'a Scope, &'a Fields) {
+impl<'a> PatternMatcher for (&'a Group, &'a Fields) {
+    fn get_matches(&self) -> (&'a Group, &'a Fields) {
         (self.0, self.1)
     }
 }
 
 fn pattern_match<'a>(
     fields: &'a Fields,
-) -> impl FnMut(&'a Shape) -> Option<(&'a Scope, &'a Fields)> {
-    move |shape: &Shape| match (&shape.scope, fields) {
-        tail @ ((&Named(..), &Fields::Named(..)) | (&Unnamed(..), &Fields::Unnamed(..)))
-        // TODO: Add support for variadic and range patterns
-        // This is kind of expensive..
+) -> impl FnMut(&'a PatternFrag) -> Option<(&'a Group, &'a Fields)> {
+    move |shape: &PatternFrag| match (&shape.group, fields) {
+        tail @ ((&Group::Named{..}, &Fields::Named(..)) | (&Group::Unnamed{..}, &Fields::Unnamed(..)))
+        // This is kind of expensive.. But what do I care?
             => if tail.has_variadic_last() {
                 if tail.has_minimum_matches() {
                     Some(tail)
@@ -57,7 +54,7 @@ fn pattern_match<'a>(
             } else {
                 None
             }
-        tail @ (Unit, Fields::Unit) => Some(tail),
+        tail @ (Group::Unit, Fields::Unit) => Some(tail),
         _ => None,
     }
 }

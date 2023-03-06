@@ -3,7 +3,7 @@
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
-use factory::{Pattern, Penum, Subject};
+use factory::{Penum, PenumExpr, Subject};
 
 mod error;
 mod factory;
@@ -59,7 +59,7 @@ mod utils;
 /// ```
 #[proc_macro_attribute]
 pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
-    let pattern = parse_macro_input!(attr as Pattern);
+    let pattern = parse_macro_input!(attr as PenumExpr);
     let input = parse_macro_input!(input as Subject);
 
     // Loop through enum definition and match each variant with each shape pattern.

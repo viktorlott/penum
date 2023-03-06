@@ -16,7 +16,7 @@
     </a>
 </div>
 
-`penum` is a procedural macro that is used to make an enum follow a given pattern, which can include generics with trait bounds.
+`penum` is a procedural macro that is used to make an enum conform to a given pattern, which can include generics with trait bounds. Pattern matching, but for enums!
 
 ## Installation
 This crate is available on [crates.io](https://crates.io/crates/penum) and can be used by adding the following to your project's Cargo.toml:
@@ -30,12 +30,14 @@ $ cargo add penum
 ```
 
 ## Overview
-A `pattern` consists of one or more `shapes` and an optional `where clause`, that auto bind all concrete types that matches your shape(s)--with the trait bounds you've specified.
-- `shapes` can either be `Named {...}`, `Unnamed (...)` or `Unit`, and are used to approve variants.
-    - `generic` parameters are used as `named placeholders` which are polymorphic types that CAN have trait bounds, but **CAN ONLY** be declared with capital letters.
-    - `placeholder` parameters are used as `unnamed placeholders` which are polymorphic types that CANNOT have trait bounds, and are declared with undercore `_`.
-    - `variadic` parameter is used to express that a shape has a polymorphic rest parameter, and **CAN ONLY** be declared as the last argument--once.
-- `where clause` is used to bind generic parameters to traits.
+
+1. A `penum` expression consists of a `pattern` and an optional `where clause`.
+2. A `pattern` can consists of multiple `pattern fragments` that comes in three `group`-flavors, `Named {...}`, `Unnamed (...)` and `Unit`. They are then used for pattern matching against variants. 
+4. A `group`'s inner parts can consist of:
+    1. `generic` parameters and are used as `named polymorphic placeholders` that CAN have trait bounds, but **CAN ONLY** be declared with capital letters.
+    2. `placeholder` parameters and are used as `unnamed polymorphic placeholders` that CANNOT have trait bounds, and are declared with undercore `_`.
+    3. `variadic` parameters which are `polymorphic rest placeholders` and **CAN ONLY** be declared as the last argument, and only once (for now).
+- `where clause` is used to bind generic parameters to traits which puts constraints on the concrete types that follows.
 
 ### Use case
 Normally, using a generic in an enum means that it gets applied to the whole enum, and not per variant. For example, if I want to specify that all variants should be a `tuple(T)` where T must implement `Copy`, I'd have to specify a generic for all variants:
@@ -73,11 +75,7 @@ enum Foo {
 - Variadic `(T, U, ..) | {num: T, ..}`
 #### Under development
 - `Static dispatch` - auto implement `core`/`std`/`custom` traits ([read more](https://github.com/viktorlott/penum/blob/main/docs/static-dispatch.md)).
-#### Unsupported
-- `RangeLit` - variadic fields by range `(T, U, ..4) | {num: T, ..3}`
-- `VariadicLit` - variadic fields with bounds `(T, U, ..Copy) | {num: T, ..Copy}` 
-- `Discriminants` - support for `#ident(T) = func(#ident)`, or something..
- 
+
 
 ## Examples
 It's also possible to make an enum conform to multiple shapes by seperating a `shape` with `|` symbol, for example:
@@ -85,6 +83,7 @@ It's also possible to make an enum conform to multiple shapes by seperating a `s
 #[penum( (T) | (T, T) | { num: T } where T: Copy )]
 enum Foo {
     Bar(i32), 
+    Bor(i32), 
     Ber(u32, i32), 
     Bur { num: f32 }
 }
@@ -98,6 +97,7 @@ enum Foo {
     Bar(String), 
         ^^^^^^
     // ERROR: `String` doesn't implement `Copy`
+    Bor(i32), 
     Ber(u32, i32), 
     Bur { num: f32 }
 }
@@ -107,10 +107,14 @@ enum Foo {
 #[penum( (T) | (T, T) | { num: T } where T: Copy )]
 enum Foo {
     Bar(u32), 
+    Bor(i32), 
     Ber(u32, i32, i32),
         ^^^^^^^^^^^^^
     // Found: `Ber(u32, i32, i32)` 
     // Expected: `(T) | (T, T) | { num: T }`
+    Bwr(String),
+        ^^^^^^
+    // ERROR: `String` doesn't implement `Copy`
     Bur { num: f32 }
 }
 ```
@@ -121,7 +125,19 @@ This is done by specifing `_`:
 #[penum( (_) | (_, _) | { num: _ } )]
 enum Foo {
     Bar(u32), 
-    Ber(u32, i32, i32), 
+    Bor(i32, f32), 
+    Ber(u32, i32), 
+    Bur { num: f32 }
+}
+```
+
+Other times we only care about the first varaint field implementing a trait:
+```rust
+#[penum( (T, ..) | { num: T, .. } where T: Copy )]
+enum Foo {
+    Bar(u32), 
+    Bor(i32, f32), 
+    Ber(u32, i32), 
     Bur { num: f32 }
 }
 ```
@@ -183,6 +199,20 @@ enum Must {
 }
 ```
 
+#### Unsupported
+- `RangeLit` - variadic fields by range `(T, U, ..4) | {num: T, ..3}`
+- `VariadicLit` - variadic fields with bounds `(T, U, ..Copy) | {num: T, ..Copy}` 
+- `Discriminants` - support for `#ident(T) = func(#ident)`, or something..
+ 
 
 <!-- [![Banner](https://raw.githubusercontent.com/viktorlott/penum/main/penum-logo.png)](https://github.com/viktorlott/penum) -->
 <!-- [<img alt="Github" src="https://raw.githubusercontent.com/viktorlott/penum/main/penum-logo.png" height="100">](https://github.com/viktorlott/penum) -->
+
+
+
+<!-- A `pattern` consists of one or more `shapes` and an optional `where clause`, that auto bind all concrete types that matches your shape(s)--with the trait bounds you've specified.
+- `shapes` can either be `Named {...}`, `Unnamed (...)` or `Unit`, and are used to approve variants.
+    - `generic` parameters are used as `named placeholders` which are polymorphic types that CAN have trait bounds, but **CAN ONLY** be declared with capital letters.
+    - `placeholder` parameters are used as `unnamed placeholders` which are polymorphic types that CANNOT have trait bounds, and are declared with undercore `_`.
+    - `variadic` parameter is used to express that a shape has a polymorphic rest parameter, and **CAN ONLY** be declared as the last argument--once.
+- `where clause` is used to bind generic parameters to traits. -->

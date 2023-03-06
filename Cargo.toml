@@ -6,7 +6,10 @@ description = "Make enum conform to a given pattern"
 license = "MIT OR Apache-2.0"
 keywords = ["enum", "pattern", "shape", "macro", "proc-macro"]
 authors = ["Viktor Lott"]
-categories = ["development-tools::testing", "development-tools::procedural-macro-helpers"]
+categories = [
+    "development-tools::testing",
+    "development-tools::procedural-macro-helpers",
+]
 repository = "https://github.com/viktorlott/penum"
 
 [lib]
@@ -17,3 +20,4 @@ doctest = false
 proc-macro2 = "1.0.51"
 quote = "1.0.23"
 syn = { version = "1.0.109", features = ["parsing", "full"] }
+trybuild = "1.0.79"

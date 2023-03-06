@@ -9,28 +9,28 @@ use syn::{
     Token, Variant, WhereClause,
 };
 
-use crate::factory::Shape;
+use crate::factory::PatternFrag;
 
 pub type TypeMap = BTreeMap<String, BTreeSet<String>>;
 
-pub fn parse_shapes(input: ParseStream) -> syn::Result<Vec<Shape>> {
-    let mut shape = vec![input.call(parse_shape)?];
+pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatternFrag>> {
+    let mut shape = vec![input.call(parse_pattern_fragment)?];
 
     while input.peek(token::Or) {
         let _: token::Or = input.parse()?;
-        shape.push(input.call(parse_shape)?);
+        shape.push(input.call(parse_pattern_fragment)?);
     }
 
     Ok(shape)
 }
 
-pub fn parse_shape(input: ParseStream) -> syn::Result<Shape> {
+pub fn parse_pattern_fragment(input: ParseStream) -> syn::Result<PatternFrag> {
     if input.peek(Token![$]) {
         let _: Token![$] = input.parse()?;
     }
-    Ok(Shape {
+    Ok(PatternFrag {
         ident: input.parse()?,
-        scope: input.parse()?,
+        group: input.parse()?,
     })
 }
 

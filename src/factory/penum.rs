@@ -8,7 +8,7 @@ use syn::{parse_quote, spanned::Spanned, Error, WherePredicate};
 
 use crate::{
     error::Diagnostic,
-    factory::{pattern::Pattern, subject::Subject},
+    factory::{pattern::PenumExpr, subject::Subject},
     utils::{string, TypeMap},
 };
 
@@ -16,7 +16,7 @@ pub struct Disassembled;
 pub struct Assembled;
 
 pub struct Penum<State = Disassembled> {
-    pub pattern: Pattern,
+    pub pattern: PenumExpr,
     pub subject: Subject,
     pub error: Diagnostic,
     pub types: TypeMap,
@@ -24,7 +24,7 @@ pub struct Penum<State = Disassembled> {
 }
 
 impl Penum<Disassembled> {
-    pub fn from(pattern: Pattern, subject: Subject) -> Self {
+    pub fn from(pattern: PenumExpr, subject: Subject) -> Self {
         Self {
             pattern,
             subject,

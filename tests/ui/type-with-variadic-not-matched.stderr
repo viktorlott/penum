@@ -1,0 +1,5 @@
+error: Found usize but expected i32.
+ --> tests/ui/type-with-variadic-not-matched.rs:9:9
+  |
+9 |     Bar(usize, i32, String),
+  |         ^^^^^

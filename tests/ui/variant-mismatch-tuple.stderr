@@ -1,0 +1,5 @@
+error: `Static { name : & 'a str, age : usize }` doesn't match pattern `tuple(_)`
+ --> tests/ui/variant-mismatch-tuple.rs:6:12
+  |
+6 |     Static { name: &'a str, age: usize },
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
