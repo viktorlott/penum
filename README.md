@@ -30,11 +30,12 @@ $ cargo add penum
 ```
 
 ## Overview
-A `pattern` consists of one or more `shapes` and an optional `where clause`, which would auto bind all the concrete types that matches your pattern--with the trait bounds you've specified.
-- `shape` can either be `Named`, `Unnamed` or `Unit`, and are used to validate variants.
-- `where` clause is used to bind generic parameters to traits.
-- `generic` parameter **CAN ONLY** be declared with capital letters or underscore. 
-  e.g `(T, FOO, BAR)` are valid generic parameters, but `(t, Foo, BaR)` are not, they are considered as **concrete** types.
+A `pattern` consists of one or more `shapes` and an optional `where clause`, that auto bind all concrete types that matches your shape(s)--with the trait bounds you've specified.
+- `shapes` can either be `Named {...}`, `Unnamed (...)` or `Unit`, and are used to approve variants.
+    - `generic` parameters are used as `named placeholders` which are polymorphic types that CAN have trait bounds, but **CAN ONLY** be declared with capital letters.
+    - `placeholder` parameters are used as `unnamed placeholders` which are polymorphic types that CANNOT have trait bounds, and are declared with undercore `_`.
+    - `variadic` parameter is used to express that a shape has a polymorphic rest parameter, and **CAN ONLY** be declared as the last argument--once.
+- `where clause` is used to bind generic parameters to traits.
 
 ### Use case
 Normally, using a generic in an enum means that it gets applied to the whole enum, and not per variant. For example, if I want to specify that all variants should be a `tuple(T)` where T must implement `Copy`, I'd have to specify a generic for all variants:
@@ -62,16 +63,18 @@ enum Foo {
     Bur(f32)
 }
 ```
-..which would expand to the first example above.
+..which would expand to the first example above, but where T, U and F are replaced with i32, u32 and f32.
 
 #### Supported
-- Shapes `(_, _) | {num: _} | unit`
+- Shapes `(...) | {...}`
 - Generics `(T, U) | {num: T}`
+- Placeholders `(_, _) | {num: _}`
 - Bounds `(T, U) where T: Copy, U: Clone`
 - Variadic `(T, U, ..) | {num: T, ..}`
+#### Under development
+- `Static dispatch` - auto implement `core`/`std`/`custom` traits ([read more](https://github.com/viktorlott/penum/blob/main/docs/static-dispatch.md)).
 #### Unsupported
-- `Static dispatch` - auto implement common `std` traits.
-- `RangeLit` - variadic fields by range `(T, U, ..4) | {num: T, ..3}` 
+- `RangeLit` - variadic fields by range `(T, U, ..4) | {num: T, ..3}`
 - `VariadicLit` - variadic fields with bounds `(T, U, ..Copy) | {num: T, ..Copy}` 
 - `Discriminants` - support for `#ident(T) = func(#ident)`, or something..
  
@@ -134,6 +137,8 @@ impl Trait for i32 {}
 trait Advanced {}
 impl Advanced for usize {}
 
+// `(T, FOO, BAR)` are valid generic parameters, but `(t, Foo, BaR)` are not, 
+// they are considered as **concrete** types. 
 #[penum( (T, T, U) | (T, U) | { name: T } where T: Trait, U: Advanced )]
 enum Vector3 {
     Integer(i32, f32, usize),
