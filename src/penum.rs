@@ -8,7 +8,7 @@ use syn::{parse_quote, spanned::Spanned, Error};
 
 use crate::{
     error::Diagnostic,
-    factory::{clause::WherePredicate, pattern::PenumExpr, subject::Subject},
+    factory::{PenumExpr, Subject, WherePredicate},
     utils::{string, PolymorphicMap},
 };
 

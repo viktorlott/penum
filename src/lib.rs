@@ -3,10 +3,12 @@
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
-use factory::{Penum, PenumExpr, Subject};
+use factory::{PenumExpr, Subject};
+use penum::Penum;
 
 mod error;
 mod factory;
+mod penum;
 mod utils;
 
 /// Use this to make an enum conform to a pattern with or without trait bounds.

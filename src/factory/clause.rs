@@ -4,8 +4,8 @@ use syn::{
     parenthesized,
     parse::{Parse, ParseStream, Result},
     punctuated::Punctuated,
-    token, BoundLifetimes, Lifetime, ParenthesizedGenericArguments, Path, PathArguments, Token,
-    TraitBoundModifier, Type,
+    token, BoundLifetimes, Ident, Lifetime, ParenthesizedGenericArguments, Path, PathArguments,
+    Token, TraitBoundModifier, Type,
 };
 
 pub struct WhereClause {
@@ -161,10 +161,17 @@ impl Parse for TypeParamBound {
 impl Parse for TraitBound {
     fn parse(input: ParseStream) -> Result<Self> {
         let dispatch = if input.peek(Token![^]) {
+            let token: Token![^] = input.parse()?;
+            let name_trait: Ident = input.fork().parse()?;
+
             // TODO: We should also check if the trait that comes after exists in over "allow" list.
             //       The allow list should for now contain core traits.
             //
-            Some(input.parse()?) // We do all this just to support `^` (dispatch) symbol.
+            if name_trait == "_TesterTrait" {
+                Some(token) // We do all this just to support `^` (dispatch) symbol.
+            } else {
+                None
+            }
         } else {
             None
         };
