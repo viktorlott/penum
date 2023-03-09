@@ -1,20 +1,20 @@
-use proc_macro2::TokenStream;
 use quote::ToTokens;
 use syn::{
-    braced, parenthesized,
-    parse::{Parse, ParseStream},
     parse_quote,
     punctuated::{IntoIter, Iter, Punctuated},
     spanned::Spanned,
-    token, ExprRange, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, LitInt, Token, Variant,
+    token, ExprRange, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, Token, Variant,
 };
 
 use crate::{
     error::Diagnostic,
-    utils::{parse_pattern, string, PolymorphicMap},
+    utils::{string, PolymorphicMap},
 };
 
 use super::{pattern_match, PunctuatedParameters, WhereClause};
+
+mod parse;
+mod to_tokens;
 
 /// A Penum expression consists of one or more patterns, and an optional WhereClause.
 pub struct PenumExpr {
@@ -27,8 +27,8 @@ pub struct PatternFrag {
     pub group: Group,
 }
 
+// TODO: Replace `Punctuated` with custom sequence type
 pub enum Group {
-    // TODO: Replace `Punctuated` with custom sequence type
     Named {
         parameters: PunctuatedParameters,
         delimiter: token::Brace,
@@ -53,6 +53,7 @@ pub enum Parameter {
     Variadic(Token![..]),
     Range(ExprRange),
 }
+
 // TODO: Refacto this when you can
 impl PenumExpr {
     const PLACEHOLDER_SYMBOL: &str = "_";
@@ -64,6 +65,20 @@ impl PenumExpr {
         self.pattern
             .iter()
             .find_map(pattern_match(&variant_item.fields))
+    }
+
+    pub fn print_pattern(&self) -> String {
+        self.pattern
+            .iter()
+            .map(|s| s.to_token_stream().to_string())
+            .reduce(|acc, s| {
+                if acc.is_empty() {
+                    s
+                } else {
+                    format!("{acc} | {s}")
+                }
+            })
+            .unwrap()
     }
 
     pub fn validate_and_collect(
@@ -80,11 +95,7 @@ impl PenumExpr {
                 format!(
                     "`{}` doesn't match pattern `{}`",
                     variant.to_token_stream(),
-                    // Fix this sh*t
-                    self.pattern
-                        .iter()
-                        .map(|s| s.to_token_stream().to_string())
-                        .reduce(|acc, s| if acc.is_empty() {s} else {format!("{acc} | {s}")}).unwrap()
+                    self.print_pattern()
                 ),
             );
         };
@@ -206,102 +217,6 @@ impl Group {
                     .fold(0, |acc, fk| if f(fk) { acc + 1 } else { acc })
             }
             Group::Unit => 0,
-        }
-    }
-}
-
-impl Parse for PenumExpr {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(Self {
-            pattern: input.call(parse_pattern)?,
-            where_clause: {
-                if input.peek(Token![where]) {
-                    Some(input.parse()?)
-                } else {
-                    None
-                }
-            },
-        })
-    }
-}
-
-impl Parse for PatternFrag {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.peek(Token![$]) {
-            input.parse::<Token![$]>()?;
-        }
-
-        Ok(PatternFrag {
-            ident: input.parse()?,
-            group: input.parse()?,
-        })
-    }
-}
-
-impl Parse for Group {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let content;
-        Ok(if input.peek(token::Brace) {
-            let token = braced!(content in input);
-            Group::Named {
-                parameters: content.parse_terminated(Parameter::parse)?,
-                delimiter: token,
-            }
-        } else if input.peek(token::Paren) {
-            let token = parenthesized!(content in input);
-            Group::Unnamed {
-                parameters: content.parse_terminated(Parameter::parse)?,
-                delimiter: token,
-            }
-        } else {
-            Group::Unit
-        })
-    }
-}
-
-impl Parse for Parameter {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(if input.peek(Token![..]) && input.peek2(LitInt) {
-            Parameter::Range(input.parse()?)
-        } else if input.peek(Token![..]) {
-            Parameter::Variadic(input.parse()?)
-        } else if input.peek(Ident) && input.peek2(Token![:]) {
-            Parameter::Regular(input.call(Field::parse_named)?)
-        } else {
-            Parameter::Regular(input.call(Field::parse_unnamed)?)
-        })
-    }
-}
-
-impl ToTokens for PatternFrag {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        self.ident.to_tokens(tokens);
-        self.group.to_tokens(tokens);
-    }
-}
-
-impl ToTokens for Parameter {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        match self {
-            Parameter::Regular(f) => f.to_tokens(tokens),
-            Parameter::Variadic(v) => v.to_tokens(tokens),
-            Parameter::Range(r) => r.to_tokens(tokens),
-        }
-    }
-}
-
-impl ToTokens for Group {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        match self {
-            Group::Named {
-                parameters,
-                delimiter,
-            } => delimiter.surround(tokens, |tokens| parameters.to_tokens(tokens)),
-            Group::Unnamed {
-                parameters,
-                delimiter,
-            } => delimiter.surround(tokens, |tokens| parameters.to_tokens(tokens)),
-            Group::Unit => (),
         }
     }
 }

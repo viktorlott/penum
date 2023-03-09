@@ -42,7 +42,7 @@ fn pattern_match<'a>(
 ) -> impl FnMut(&'a PatternFrag) -> Option<(&'a Group, &'a Fields)> {
     move |shape: &PatternFrag| match (&shape.group, fields) {
         tail @ ((&Group::Named{..}, &Fields::Named(..)) | (&Group::Unnamed{..}, &Fields::Unnamed(..)))
-        // This is kind of expensive.. But what do I care?
+        // This is kind of expensive.. clean up when possible
             => if tail.has_variadic_last() {
                 if tail.has_minimum_matches() {
                     Some(tail)
