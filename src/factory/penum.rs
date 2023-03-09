@@ -8,11 +8,9 @@ use syn::{parse_quote, spanned::Spanned, Error};
 
 use crate::{
     error::Diagnostic,
-    factory::{pattern::PenumExpr, subject::Subject, clause::{WherePredicate}},
+    factory::{clause::WherePredicate, pattern::PenumExpr, subject::Subject},
     utils::{string, PolymorphicMap},
 };
-
-
 
 pub struct Disassembled;
 pub struct Assembled;

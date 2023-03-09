@@ -1,10 +1,12 @@
+use proc_macro2::TokenStream;
 use quote::ToTokens;
 use syn::{
+    parenthesized,
     parse::{Parse, ParseStream, Result},
     punctuated::Punctuated,
-    token, BoundLifetimes, Lifetime, Token, Type, TraitBoundModifier, ParenthesizedGenericArguments, PathArguments, Path, parenthesized,
+    token, BoundLifetimes, Lifetime, ParenthesizedGenericArguments, Path, PathArguments, Token,
+    TraitBoundModifier, Type,
 };
-use proc_macro2::TokenStream;
 
 pub struct WhereClause {
     pub where_token: Token![where],
@@ -22,7 +24,7 @@ pub struct PredicateType {
     pub lifetimes: Option<BoundLifetimes>,
     pub bounded_ty: Type,
     pub colon_token: Token![:],
-    
+
     pub bounds: Punctuated<TypeParamBound, Token![+]>,
 }
 
@@ -159,10 +161,9 @@ impl Parse for TypeParamBound {
 impl Parse for TraitBound {
     fn parse(input: ParseStream) -> Result<Self> {
         let dispatch = if input.peek(Token![^]) {
-
             // TODO: We should also check if the trait that comes after exists in over "allow" list.
             //       The allow list should for now contain core traits.
-            // 
+            //
             Some(input.parse()?) // We do all this just to support `^` (dispatch) symbol.
         } else {
             None
@@ -247,4 +248,3 @@ impl ToTokens for TraitBound {
         }
     }
 }
-

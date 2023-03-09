@@ -220,7 +220,7 @@ impl Parse for PenumExpr {
                 } else {
                     None
                 }
-            }
+            },
         })
     }
 }
