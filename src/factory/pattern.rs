@@ -12,12 +12,12 @@ use syn::{
 
 use crate::{
     error::Diagnostic,
-    utils::{parse_pattern, string, TypeMap},
+    utils::{parse_pattern, string, PolymorphicMap},
 };
 
 use super::{pattern_match, PunctuatedParameters};
 
-/// An Penum expression consists of one or more patterns, and an optional WhereClause.
+/// A Penum expression consists of one or more patterns, and an optional WhereClause.
 pub struct PenumExpr {
     pub pattern: Vec<PatternFrag>,
     pub where_clause: Option<WhereClause>,
@@ -70,7 +70,7 @@ impl PenumExpr {
     pub fn validate_and_collect(
         &self,
         variant: &Variant,
-        types: &mut TypeMap,
+        types: &mut PolymorphicMap,
         error: &mut Diagnostic,
     ) {
         // A pattern can contain multiple shapes, e.g. `(_) | (_, _) | { name: _, age: usize }`
@@ -159,9 +159,11 @@ impl Group {
         thread_local! {static EMPTY_SLICE_ITER: Punctuated<Parameter, ()> = Punctuated::new();}
 
         match self {
-            // UNSAFE: Don't do this sh*t.
+            // UNSAFE: Don't do this sh*t. The thing is that we are transmuting an empty iter that is created from a static Punctuated struct.
+            //         The lifetime is invariant in Iter<'_> which mean that we are not allowed to return another lifetime, even if it outlives 'a.
+            //         It should be "okay" given its static and empty, but I'm not 100% sure if this actually can cause UB.
             Group::Unit => EMPTY_SLICE_ITER.with(|f| unsafe { std::mem::transmute(f.iter()) }),
-            // Unit => panic!("Empty Iter is unsupported right now."),
+            // Group::Unit => panic!("Empty Iter is unsupported right now."),
             Group::Named { parameters, .. } => parameters.iter(),
             Group::Unnamed { parameters, .. } => parameters.iter(),
         }

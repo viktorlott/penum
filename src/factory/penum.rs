@@ -9,7 +9,7 @@ use syn::{parse_quote, spanned::Spanned, Error, WherePredicate};
 use crate::{
     error::Diagnostic,
     factory::{pattern::PenumExpr, subject::Subject},
-    utils::{string, TypeMap},
+    utils::{string, PolymorphicMap},
 };
 
 pub struct Disassembled;
@@ -19,7 +19,7 @@ pub struct Penum<State = Disassembled> {
     pub pattern: PenumExpr,
     pub subject: Subject,
     pub error: Diagnostic,
-    pub types: TypeMap,
+    pub types: PolymorphicMap,
     _marker: PhantomData<State>,
 }
 

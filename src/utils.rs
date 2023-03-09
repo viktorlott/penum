@@ -11,7 +11,7 @@ use syn::{
 
 use crate::factory::PatternFrag;
 
-pub type TypeMap = BTreeMap<String, BTreeSet<String>>;
+pub type PolymorphicMap = BTreeMap<String, BTreeSet<String>>;
 
 pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatternFrag>> {
     let mut shape = vec![input.call(parse_pattern_fragment)?];
