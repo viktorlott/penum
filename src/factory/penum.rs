@@ -4,13 +4,15 @@ use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::format_ident;
 use quote::ToTokens;
-use syn::{parse_quote, spanned::Spanned, Error, WherePredicate};
+use syn::{parse_quote, spanned::Spanned, Error};
 
 use crate::{
     error::Diagnostic,
-    factory::{pattern::PenumExpr, subject::Subject},
+    factory::{pattern::PenumExpr, subject::Subject, clause::{WherePredicate}},
     utils::{string, PolymorphicMap},
 };
+
+
 
 pub struct Disassembled;
 pub struct Assembled;

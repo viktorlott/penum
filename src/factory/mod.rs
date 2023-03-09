@@ -3,10 +3,12 @@ use syn::{punctuated::Punctuated, Fields, Token};
 mod pattern;
 mod penum;
 mod subject;
+mod clause;
 
 pub use pattern::*;
 pub use penum::*;
 pub use subject::*;
+pub use clause::*;
 
 pub type PunctuatedParameters = Punctuated<Parameter, Token![,]>;
 

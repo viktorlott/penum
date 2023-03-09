@@ -7,7 +7,6 @@ use syn::{
     punctuated::{IntoIter, Iter, Punctuated},
     spanned::Spanned,
     token, ExprRange, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, LitInt, Token, Variant,
-    WhereClause,
 };
 
 use crate::{
@@ -15,7 +14,7 @@ use crate::{
     utils::{parse_pattern, string, PolymorphicMap},
 };
 
-use super::{pattern_match, PunctuatedParameters};
+use super::{pattern_match, PunctuatedParameters, WhereClause};
 
 /// A Penum expression consists of one or more patterns, and an optional WhereClause.
 pub struct PenumExpr {
@@ -215,7 +214,13 @@ impl Parse for PenumExpr {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(Self {
             pattern: input.call(parse_pattern)?,
-            where_clause: input.parse()?,
+            where_clause: {
+                if input.peek(Token![where]) {
+                    Some(input.parse()?)
+                } else {
+                    None
+                }
+            }
         })
     }
 }
