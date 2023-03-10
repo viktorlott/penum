@@ -46,11 +46,10 @@ impl Penum<Disassembled> {
             enum_data
                 .variants
                 .iter()
-                .filter_map(|variant_item| {
+                .for_each(|variant_item| {
                     self.expr
-                        .validate_and_collect(variant_item, &mut self.types, &mut self.error)
-                })
-                .map(|(g, f)| {});
+                        .validate_and_collect(variant_item, &mut self.types, &mut self.error);
+                });
         }
 
         // SAFETY: Transmuting Self into Self with a different ZST is safe.

@@ -81,11 +81,11 @@ impl PenumExpr {
         variant: &'a Variant,
         types: &mut PolymorphicMap,
         error: &mut Diagnostic,
-    ) -> Option<MatchPair> {
+    ) {
         // A pattern can contain multiple shapes, e.g. `(_) | (_, _) | { name: _, age: usize }`
         // So if the variant_item matches a shape, we associate the pattern with the variant.
         let Some((group, ifields)) = self.pattern_matching_on(variant) else {
-            error.extend(
+            return error.extend(
                 variant.fields.span(),
                 format!(
                     "`{}` doesn't match pattern `{}`",
@@ -93,12 +93,11 @@ impl PenumExpr {
                     self.print_pattern()
                 ),
             );
-            return None
         };
 
         // TODO: No support for empty unit iter, yet...
         if group.is_unit() {
-            return None;
+            return;
         }
 
         for (p, item) in group.into_iter().zip(ifields.into_iter()) {
@@ -121,8 +120,6 @@ impl PenumExpr {
                 types.insert(pty, vec![ity].into_iter().collect());
             }
         }
-
-        Some((group, ifields))
     }
 }
 
