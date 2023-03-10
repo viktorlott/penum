@@ -97,10 +97,12 @@ impl PenumExpr {
             return None;
         };
 
-        // TODO: No support for empty unit iter, yet...
+        // TODO: Before removing this, make sure to check `Group.iter()` function!
+        //       No support for empty unit iter, yet...
         if group.is_unit() {
             return None;
         }
+
         // TODO: Fix dubble push for where clause. i.e. move this outside the iterator.
         let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
         for (pat, item) in group.into_iter().zip(ifields.into_iter()) {

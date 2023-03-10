@@ -128,17 +128,14 @@ impl Parse for TraitBound {
             let token: Token![^] = input.parse()?;
             let name_trait: Ident = input.fork().parse()?;
 
-            // TODO: We should also check if the trait that comes after exists in over "allow" list.
+            // TODO: We should also check if the trait that comes after exists in our "allow" list.
             //       The allow list should for now contain core traits.
-            //
-            if name_trait == "_TesterTrait" {
-                Some(token) // We do all this just to support `^` (dispatch) symbol.
-            } else {
-                None
-            }
+            //       We do all this just to support `^` (dispatch) symbol.
+            (name_trait == "_TesterTrait").then_some(token)
         } else {
             None
         };
+
         let modifier: TraitBoundModifier = input.parse()?;
         let lifetimes: Option<BoundLifetimes> = input.parse()?;
 
