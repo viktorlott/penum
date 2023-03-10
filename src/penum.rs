@@ -43,9 +43,20 @@ impl Penum<Disassembled> {
                 "Expected to find at least one variant.",
             );
         } else {
+            // The validate and collect also works for adding `impl Trait` bounds to the pattern where clause.
             enum_data.variants.iter().for_each(|variant_item| {
-                self.expr
-                    .validate_and_collect(variant_item, &mut self.types, &mut self.error);
+                if let Some(preds) =
+                    self.expr
+                        .validate_and_collect(variant_item, &mut self.types, &mut self.error)
+                {
+                    let pat_pred = self
+                        .expr
+                        .where_clause
+                        .get_or_insert_with(|| parse_quote!(where));
+                    preds
+                        .iter()
+                        .for_each(|pred| pat_pred.predicates.push(parse_quote!(#pred)))
+                }
             });
         }
 
@@ -80,14 +91,17 @@ impl Penum<Assembled> {
     fn link_bounds(self: &mut Penum<Assembled>) -> Vec<TokenStream2> {
         let mut bound_tokens = Vec::new();
         if let Some(where_cl) = self.expr.where_clause.as_ref() {
-            for predicate in where_cl.predicates.iter() {
-                match predicate {
+            where_cl
+                .predicates
+                .iter()
+                .for_each(|predicate| match predicate {
                     WherePredicate::Type(pred) => {
                         if let Some(pty_set) = self.types.get(&string(&pred.bounded_ty)) {
                             pty_set
                                 .iter()
                                 .map(|ident| (format_ident!("{}", ident), &pred.bounds))
                                 .for_each(|(ident, bound)| {
+                                    println!("{ident}: {}", bound.to_token_stream());
                                     bound_tokens.push(parse_quote!(#ident: #bound))
                                 })
                         }
@@ -95,8 +109,7 @@ impl Penum<Assembled> {
                     WherePredicate::Lifetime(pred) => self
                         .error
                         .extend(pred.span(), "lifetime predicates are unsupported"),
-                }
-            }
+                })
         }
         bound_tokens
     }

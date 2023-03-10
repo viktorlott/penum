@@ -1,9 +1,12 @@
-use quote::ToTokens;
+use std::{borrow::Borrow, hash};
+
+use quote::{format_ident, ToTokens};
 use syn::{
     parse_quote,
     punctuated::{IntoIter, Iter, Punctuated},
     spanned::Spanned,
-    token, ExprRange, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, Token, Variant,
+    token::{self, Comma},
+    ExprRange, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, Token, Type, Variant,
 };
 
 use crate::{
@@ -11,7 +14,7 @@ use crate::{
     utils::{string, PolymorphicMap},
 };
 
-use super::{pattern_match, MatchPair, PunctuatedParameters, WhereClause};
+use super::{pattern_match, MatchPair, PunctuatedParameters, WhereClause, WherePredicate};
 
 mod parse;
 mod to_tokens;
@@ -77,15 +80,15 @@ impl PenumExpr {
     }
 
     pub fn validate_and_collect<'a>(
-        &'a self,
+        &'a mut self,
         variant: &'a Variant,
         types: &mut PolymorphicMap,
         error: &mut Diagnostic,
-    ) {
+    ) -> Option<Punctuated<WherePredicate, Comma>> {
         // A pattern can contain multiple shapes, e.g. `(_) | (_, _) | { name: _, age: usize }`
         // So if the variant_item matches a shape, we associate the pattern with the variant.
         let Some((group, ifields)) = self.pattern_matching_on(variant) else {
-            return error.extend(
+            error.extend(
                 variant.fields.span(),
                 format!(
                     "`{}` doesn't match pattern `{}`",
@@ -93,33 +96,62 @@ impl PenumExpr {
                     self.print_pattern()
                 ),
             );
+            return None;
         };
 
         // TODO: No support for empty unit iter, yet...
         if group.is_unit() {
-            return;
+            return None;
         }
-
+        // TODO: Fix dubble push for where clause. i.e. move this outside the iterator.
+        let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
         for (p, item) in group.into_iter().zip(ifields.into_iter()) {
             // If we cannot desctructure a pattern field, then it must be variadic.
             let Some(pfield) = p.get_field() else {
                 break;
             };
 
-            let (pty, ity) = (string(&pfield.ty), string(&item.ty));
-            let is_generic = pty.eq(Self::PLACEHOLDER_SYMBOL) || pty.to_uppercase().eq(&pty);
+            // Check if we have a impl statement, `(impl Trait, T)`.
+            if let Type::ImplTrait(imptr) = &pfield.ty {
+                let tty = format_ident!(
+                    "__IMPL_{}",
+                    string(&imptr.bounds)
+                        .replace(' ', "_")
+                        .replace(['?', '\''], "")
+                );
+                let bounds = &imptr.bounds;
+                predicates.push(parse_quote!(#tty: #bounds));
 
-            if !is_generic && pty != ity {
-                error.extend(item.ty.span(), format!("Found {ity} but expected {pty}."));
-                continue;
-            }
-
-            if let Some(set) = types.get_mut(&pty) {
-                set.insert(ity);
+                let (pty, ity) = (tty.to_string(), string(&item.ty));
+                // First we check if pty (T) exists in polymorphicmap.
+                // If it exists, insert new concrete type.
+                if let Some(set) = types.get_mut(pty.as_str()) {
+                    set.insert(ity);
+                } else {
+                    types.insert(pty, vec![ity].into_iter().collect());
+                }
             } else {
-                types.insert(pty, vec![ity].into_iter().collect());
+                // Check if we are generic or concrete type.
+                let (pty, ity) = (string(&pfield.ty), string(&item.ty));
+                let is_generic = pty.eq(Self::PLACEHOLDER_SYMBOL) || pty.to_uppercase().eq(&pty);
+
+                // If pattern type is concrete, make sure it matches item type
+                if !is_generic && pty != ity {
+                    error.extend(item.ty.span(), format!("Found {ity} but expected {pty}."));
+                    continue;
+                }
+
+                // First we check if pty (T) exists in polymorphicmap.
+                // If it exists, insert new concrete type.
+                if let Some(set) = types.get_mut(&pty) {
+                    set.insert(ity);
+                } else {
+                    types.insert(pty, vec![ity].into_iter().collect());
+                }
             }
         }
+
+        (!predicates.is_empty()).then_some(predicates)
     }
 }
 
