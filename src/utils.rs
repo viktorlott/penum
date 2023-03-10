@@ -53,3 +53,9 @@ pub fn parse_enum(
 pub fn string<T: ToTokens>(x: &T) -> String {
     x.to_token_stream().to_string()
 }
+
+// let ty_span = pred.span();
+// let assert_sync = quote_spanned!{ty_span=>
+//     struct _AssertSync where #pred: Sync;
+// };
+// println!("{}", assert_sync);

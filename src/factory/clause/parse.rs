@@ -2,8 +2,8 @@ use syn::{
     parenthesized,
     parse::{Parse, ParseStream, Result},
     punctuated::Punctuated,
-    token, BoundLifetimes, Error, Ident, Lifetime, ParenthesizedGenericArguments, Path,
-    PathArguments, Token, TraitBoundModifier,
+    token, BoundLifetimes, Ident, Lifetime, ParenthesizedGenericArguments, Path, PathArguments,
+    Token, TraitBoundModifier,
 };
 
 use super::*;
@@ -102,12 +102,12 @@ impl Parse for WherePredicate {
 impl Parse for TypeParamBound {
     fn parse(input: ParseStream) -> Result<Self> {
         if input.peek(Lifetime) {
-            // .map(TypeParamBound::Lifetime)?
-            let lifetime: Lifetime = input.parse()?;
-            return Err(Error::new(
-                lifetime.span(),
-                "Lifetimes are not supported in Penums where clause".to_string(),
-            ));
+            return input.parse().map(TypeParamBound::Lifetime);
+            // let lifetime: Lifetime = input.parse()?;
+            // return Err(Error::new(
+            //     lifetime.span(),
+            //     "Lifetimes are not supported in Penums where clause".to_string(),
+            // ));
         }
 
         if input.peek(token::Paren) {

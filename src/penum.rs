@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use proc_macro::TokenStream;
-use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro2::TokenStream as TokenStream2;
 use quote::format_ident;
 use quote::ToTokens;
 use syn::{parse_quote, spanned::Spanned, Error};
@@ -16,7 +16,7 @@ pub struct Disassembled;
 pub struct Assembled;
 
 pub struct Penum<State = Disassembled> {
-    pub pattern: PenumExpr,
+    pub expr: PenumExpr,
     pub subject: Subject,
     pub error: Diagnostic,
     pub types: PolymorphicMap,
@@ -24,9 +24,9 @@ pub struct Penum<State = Disassembled> {
 }
 
 impl Penum<Disassembled> {
-    pub fn from(pattern: PenumExpr, subject: Subject) -> Self {
+    pub fn from(expr: PenumExpr, subject: Subject) -> Self {
         Self {
-            pattern,
+            expr,
             subject,
             error: Default::default(),
             types: Default::default(),
@@ -43,10 +43,14 @@ impl Penum<Disassembled> {
                 "Expected to find at least one variant.",
             );
         } else {
-            enum_data.variants.iter().for_each(|variant_item| {
-                self.pattern
-                    .validate_and_collect(variant_item, &mut self.types, &mut self.error)
-            });
+            enum_data
+                .variants
+                .iter()
+                .filter_map(|variant_item| {
+                    self.expr
+                        .validate_and_collect(variant_item, &mut self.types, &mut self.error)
+                })
+                .map(|(g, f)| {});
         }
 
         // SAFETY: Transmuting Self into Self with a different ZST is safe.
@@ -79,7 +83,7 @@ impl Penum<Assembled> {
 
     fn link_bounds(self: &mut Penum<Assembled>) -> Vec<TokenStream2> {
         let mut bound_tokens = Vec::new();
-        if let Some(where_cl) = self.pattern.where_clause.as_ref() {
+        if let Some(where_cl) = self.expr.where_clause.as_ref() {
             for predicate in where_cl.predicates.iter() {
                 match predicate {
                     WherePredicate::Type(pred) => {
@@ -92,9 +96,9 @@ impl Penum<Assembled> {
                                 })
                         }
                     }
-                    _ => self
+                    WherePredicate::Lifetime(pred) => self
                         .error
-                        .extend(Span::call_site(), "Unsupported `where clause`"),
+                        .extend(pred.span(), "lifetime predicates are unsupported"),
                 }
             }
         }

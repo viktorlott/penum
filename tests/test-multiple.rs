@@ -33,20 +33,6 @@ enum Variadic {
     V1(i32, usize, String, u8, u16),
 }
 
-// #[penum[tuple(_)]]
-// enum Must<'a> {
-//     Static { name: &'a str, age: usize }
-//         // ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-//         // `Static { name : & 'a str, age : usize }` doesn't match pattern `tuple(_)`
-// }
-
-// #[penum[tuple(T) where T: Trait]]
-// // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-// // `the trait bound `usize: Trait` is not satisfied`
-// enum Must {
-//     Static (usize)
-// }
-
 fn main() {
     match Vector3::Integer(10, 10.0, 10) {
         Vector3::Integer(num, _, _) => num,

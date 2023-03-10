@@ -8,9 +8,10 @@ pub use clause::*;
 pub use pattern::*;
 pub use subject::*;
 
+// TODO: Replace `Punctuated` with custom sequence type
 pub type PunctuatedParameters = Punctuated<Parameter, Token![,]>;
+pub type MatchPair<'a> = (&'a Group, &'a Fields);
 
-// TODO: Change this sh*t, or add some
 pub trait PatternMatcher {
     fn get_matches(&self) -> (&Group, &Fields);
 
@@ -31,30 +32,24 @@ pub trait PatternMatcher {
     }
 }
 
-impl<'a> PatternMatcher for (&'a Group, &'a Fields) {
-    fn get_matches(&self) -> (&'a Group, &'a Fields) {
+impl<'a> PatternMatcher for MatchPair<'a> {
+    fn get_matches(&self) -> MatchPair {
         (self.0, self.1)
     }
 }
 
-fn pattern_match<'a>(
-    fields: &'a Fields,
-) -> impl FnMut(&'a PatternFrag) -> Option<(&'a Group, &'a Fields)> {
+fn pattern_match<'a>(fields: &'a Fields) -> impl FnMut(&'a PatternFrag) -> Option<MatchPair<'a>> {
+    // This is kind of expensive.. clean up when possible
     move |shape: &PatternFrag| match (&shape.group, fields) {
-        tail @ ((&Group::Named{..}, &Fields::Named(..)) | (&Group::Unnamed{..}, &Fields::Unnamed(..)))
-        // This is kind of expensive.. clean up when possible
-            => if tail.has_variadic_last() {
-                if tail.has_minimum_matches() {
-                    Some(tail)
-                } else {
-                    None
-                }
-            } else if tail.has_same_len() {
-                Some(tail)
+        pair @ ((&Group::Named { .. }, &Fields::Named(..))
+        | (&Group::Unnamed { .. }, &Fields::Unnamed(..))) => {
+            if pair.has_variadic_last() {
+                pair.has_minimum_matches().then_some(pair)
             } else {
-                None
+                pair.has_same_len().then_some(pair)
             }
-        tail @ (Group::Unit, Fields::Unit) => Some(tail),
+        }
+        pair @ (Group::Unit, Fields::Unit) => Some(pair),
         _ => None,
     }
 }

@@ -11,7 +11,7 @@ use crate::{
     utils::{string, PolymorphicMap},
 };
 
-use super::{pattern_match, PunctuatedParameters, WhereClause};
+use super::{pattern_match, MatchPair, PunctuatedParameters, WhereClause};
 
 mod parse;
 mod to_tokens;
@@ -27,7 +27,6 @@ pub struct PatternFrag {
     pub group: Group,
 }
 
-// TODO: Replace `Punctuated` with custom sequence type
 pub enum Group {
     Named {
         parameters: PunctuatedParameters,
@@ -54,14 +53,10 @@ pub enum Parameter {
     Range(ExprRange),
 }
 
-// TODO: Refacto this when you can
 impl PenumExpr {
     const PLACEHOLDER_SYMBOL: &str = "_";
 
-    pub fn pattern_matching_on<'a>(
-        &'a self,
-        variant_item: &'a Variant,
-    ) -> Option<(&'a Group, &'a Fields)> {
+    pub fn pattern_matching_on<'a>(&'a self, variant_item: &'a Variant) -> Option<MatchPair> {
         self.pattern
             .iter()
             .find_map(pattern_match(&variant_item.fields))
@@ -81,16 +76,16 @@ impl PenumExpr {
             .unwrap()
     }
 
-    pub fn validate_and_collect(
-        &self,
-        variant: &Variant,
+    pub fn validate_and_collect<'a>(
+        &'a self,
+        variant: &'a Variant,
         types: &mut PolymorphicMap,
         error: &mut Diagnostic,
-    ) {
+    ) -> Option<MatchPair> {
         // A pattern can contain multiple shapes, e.g. `(_) | (_, _) | { name: _, age: usize }`
         // So if the variant_item matches a shape, we associate the pattern with the variant.
         let Some((group, ifields)) = self.pattern_matching_on(variant) else {
-            return error.extend(
+            error.extend(
                 variant.fields.span(),
                 format!(
                     "`{}` doesn't match pattern `{}`",
@@ -98,27 +93,21 @@ impl PenumExpr {
                     self.print_pattern()
                 ),
             );
+            return None
         };
 
         // TODO: No support for empty unit iter, yet...
         if group.is_unit() {
-            return;
+            return None;
         }
 
-        let mut variadic_or_range = false;
         for (p, item) in group.into_iter().zip(ifields.into_iter()) {
-            // TODO: Right now, if a variadic is found, we skip validating the rest of the fields
-            //       Might want to change this in the future.
-            if variadic_or_range {
-                continue;
-            }
-
-            let Some(pat) = p.get_field() else {
-                variadic_or_range = true;
-                continue;
+            // If we cannot desctructure a pattern field, then it must be variadic.
+            let Some(pfield) = p.get_field() else {
+                break;
             };
 
-            let (pty, ity) = (string(&pat.ty), string(&item.ty));
+            let (pty, ity) = (string(&pfield.ty), string(&item.ty));
             let is_generic = pty.eq(Self::PLACEHOLDER_SYMBOL) || pty.to_uppercase().eq(&pty);
 
             if !is_generic && pty != ity {
@@ -132,6 +121,8 @@ impl PenumExpr {
                 types.insert(pty, vec![ity].into_iter().collect());
             }
         }
+
+        Some((group, ifields))
     }
 }
 
@@ -169,9 +160,11 @@ impl Group {
         thread_local! {static EMPTY_SLICE_ITER: Punctuated<Parameter, ()> = Punctuated::new();}
 
         match self {
-            // UNSAFE: Don't do this sh*t. The thing is that we are transmuting an empty iter that is created from a static Punctuated struct.
-            //         The lifetime is invariant in Iter<'_> which mean that we are not allowed to return another lifetime, even if it outlives 'a.
-            //         It should be "okay" given its static and empty, but I'm not 100% sure if this actually can cause UB.
+            // UNSAFE: Don't do this sh*t. The thing is that we are transmuting an empty iter that
+            //         is created from a static Punctuated struct. The lifetime is invariant in Iter<'_>
+            //         which mean that we are not allowed to return another lifetime, even if it outlives 'a.
+            //         It should be "okay" given its static and empty, but I'm not 100% sure if this actually
+            //         can cause UB.
             Group::Unit => EMPTY_SLICE_ITER.with(|f| unsafe { std::mem::transmute(f.iter()) }),
             // Group::Unit => panic!("Empty Iter is unsupported right now."),
             Group::Named { parameters, .. } => parameters.iter(),
@@ -185,7 +178,6 @@ impl Group {
 
     pub fn has_variadic(&self) -> bool {
         match self {
-            // TODO: Should probably just check last field, or should it have support for (T, .., U)?
             Group::Named { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
             Group::Unnamed { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
             Group::Unit => false,

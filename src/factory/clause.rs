@@ -12,7 +12,7 @@ pub struct WhereClause {
 
 pub enum WherePredicate {
     Type(PredicateType),
-    Lifetime(PredicateLifetime), // NOTE: Might not even need this... it's not even supported
+    Lifetime(PredicateLifetime), // NOT SUPPORTED
 }
 
 pub struct PredicateType {
@@ -38,8 +38,6 @@ pub struct TraitBound {
     pub paren_token: Option<token::Paren>,
     pub dispatch: Option<Token![^]>,
     pub modifier: TraitBoundModifier,
-    /// The `for<'a>` in `for<'a> Foo<&'a T>`
     pub lifetimes: Option<BoundLifetimes>,
-    /// The `Foo<&'a T>` in `for<'a> Foo<&'a T>`
     pub path: Path,
 }

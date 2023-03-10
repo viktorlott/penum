@@ -1,0 +1,5 @@
+error: lifetime predicates are unsupported
+ --> tests/ui/lifetime-predicate-unsupported.rs:7:30
+  |
+7 | #[penum[ (T) where T: Trait, 'a: 'b ]]
+  |                              ^^
