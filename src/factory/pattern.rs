@@ -103,11 +103,13 @@ impl PenumExpr {
         }
         // TODO: Fix dubble push for where clause. i.e. move this outside the iterator.
         let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
-        for (p, item) in group.into_iter().zip(ifields.into_iter()) {
+        for (pat, item) in group.into_iter().zip(ifields.into_iter()) {
             // If we cannot desctructure a pattern field, then it must be variadic.
-            let Some(pfield) = p.get_field() else {
+            let Some(pfield) = pat.get_field() else {
                 break;
             };
+
+            let ity = string(&item.ty);
 
             // Check if we have a impl statement, `(impl Trait, T)`.
             if let Type::ImplTrait(imptr) = &pfield.ty {
@@ -121,31 +123,23 @@ impl PenumExpr {
                 let bounds = &imptr.bounds;
                 predicates.push(parse_quote!(#tty: #bounds));
 
-                let (pty, ity) = (tty.to_string(), string(&item.ty));
+                let pty = tty.to_string();
                 // First we check if pty (T) exists in polymorphicmap.
                 // If it exists, insert new concrete type.
-                if let Some(set) = types.get_mut(pty.as_str()) {
-                    set.insert(ity);
-                } else {
-                    types.insert(pty, vec![ity].into_iter().collect());
-                }
+                insert_polymap(types, pty, ity);
             } else {
                 // Check if we are generic or concrete type.
-                let (pty, ity) = (string(&pfield.ty), string(&item.ty));
+                let pty = string(&pfield.ty);
                 let is_generic = pty.eq(Self::PLACEHOLDER_SYMBOL) || pty.to_uppercase().eq(&pty);
 
                 // If pattern type is concrete, make sure it matches item type
                 if !is_generic && pty != ity {
                     error.extend(item.ty.span(), format!("Found {ity} but expected {pty}."));
                     continue;
-                }
-
-                // First we check if pty (T) exists in polymorphicmap.
-                // If it exists, insert new concrete type.
-                if let Some(set) = types.get_mut(&pty) {
-                    set.insert(ity);
                 } else {
-                    types.insert(pty, vec![ity].into_iter().collect());
+                    // First we check if pty (T) exists in polymorphicmap.
+                    // If it exists, insert new concrete type.
+                    insert_polymap(types, pty, ity);
                 }
             }
         }
@@ -154,6 +148,13 @@ impl PenumExpr {
     }
 }
 
+fn insert_polymap(types: &mut PolymorphicMap, pty: String, ity: String) {
+    if let Some(set) = types.get_mut(pty.as_str()) {
+        set.insert(ity);
+    } else {
+        types.insert(pty, vec![ity].into_iter().collect());
+    }
+}
 impl Parameter {
     pub fn is_field(&self) -> bool {
         matches!(self, Parameter::Regular(_))
