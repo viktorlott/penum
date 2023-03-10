@@ -1,5 +1,3 @@
-use std::{borrow::Borrow, hash};
-
 use quote::{format_ident, ToTokens};
 use syn::{
     parse_quote,

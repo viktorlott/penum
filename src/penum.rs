@@ -102,7 +102,6 @@ impl Penum<Assembled> {
                                 .iter()
                                 .map(|ident| (format_ident!("{}", ident), &pred.bounds))
                                 .for_each(|(ident, bound)| {
-                                    println!("{ident}: {}", bound.to_token_stream());
                                     bound_tokens.push(parse_quote!(#ident: #bound))
                                 })
                         }

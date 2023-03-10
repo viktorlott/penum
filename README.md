@@ -31,17 +31,20 @@ $ cargo add penum
 
 ## Overview
 
-- Patterns `(...) | {...}`
+- Patterns - `(...) | {...}`
 
-- Generics `(T, U) | {num: T}`
+- Generics - `(T, U) | {num: T}`
   
-- Placeholders `(_, _) | {num: _}`
+- Placeholders - `(_, _) | {num: _}`
   
-- Bounds `(T, U) where T: Copy, U: Clone`
+- Bounds - `(T, U) where T: Copy, U: Clone`
   
-- Impls `(impl Copy, impl Copy) | {name: impl Clone}`
+- Impls - `(impl Copy, impl Copy) | {name: impl Clone}`
   
-- Variadic `(T, U, ..) | {num: T, ..}`
+- Variadic - `(T, U, ..) | {num: T, ..}`
+
+- Dispatch - `(T) where T: ^AsRef<str>`
+  
 ### Use case
 Normally, using a generic in an enum means that it gets applied to the whole enum, and not per variant. For example, if I want to specify that all variants should be a `tuple(T)` where T must implement `Copy`, I'd have to specify a generic for all variants:
 ```rust
