@@ -31,12 +31,15 @@ $ cargo add penum
 
 ## Overview
 
-1. A `penum` expression consists of a `pattern` and an optional `where clause`.
-2. A `pattern` can consists of multiple `pattern fragments` that comes in three `group`-flavors, `Named {...}`, `Unnamed (...)` and `Unit`. They are then used for pattern matching against variants. 
-4. A `group`'s inner parts can consist of:
+- A `penum` expression consists of a `pattern` and an optional `where clause`.
+   
+- A `pattern` can consists of multiple `pattern fragments` that comes in three `group`-flavors, `Named {...}`, `Unnamed (...)` and `Unit`. They are then used for pattern matching against variants. 
+   
+- A `group`'s inner parts can consist of:
     1. `generic` parameters and are used as `named polymorphic placeholders` that CAN have trait bounds, but **CAN ONLY** be declared with capital letters.
     2. `placeholder` parameters and are used as `unnamed polymorphic placeholders` that CANNOT have trait bounds, and are declared with undercore `_`.
     3. `variadic` parameters which are `polymorphic rest placeholders` and **CAN ONLY** be declared as the last argument, and only once (for now).
+   
 - `where clause` is used to bind generic parameters to traits which puts constraints on the concrete types that follows.
 
 ### Use case
@@ -68,10 +71,16 @@ enum Foo {
 ..which would expand to the first example above, but where T, U and F are replaced with i32, u32 and f32.
 
 #### Supported
-- Shapes `(...) | {...}`
+- Patterns `(...) | {...}`
+
 - Generics `(T, U) | {num: T}`
+  
 - Placeholders `(_, _) | {num: _}`
+  
 - Bounds `(T, U) where T: Copy, U: Clone`
+  
+- Impls `(impl Copy, impl Copy)`
+  
 - Variadic `(T, U, ..) | {num: T, ..}`
 #### Under development
 - `Static dispatch` - auto implement `core`/`std`/`custom` traits ([read more](https://github.com/viktorlott/penum/blob/main/docs/static-dispatch.md)).
