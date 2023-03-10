@@ -43,13 +43,10 @@ impl Penum<Disassembled> {
                 "Expected to find at least one variant.",
             );
         } else {
-            enum_data
-                .variants
-                .iter()
-                .for_each(|variant_item| {
-                    self.expr
-                        .validate_and_collect(variant_item, &mut self.types, &mut self.error);
-                });
+            enum_data.variants.iter().for_each(|variant_item| {
+                self.expr
+                    .validate_and_collect(variant_item, &mut self.types, &mut self.error);
+            });
         }
 
         // SAFETY: Transmuting Self into Self with a different ZST is safe.
