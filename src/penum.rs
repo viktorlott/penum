@@ -49,6 +49,7 @@ impl Penum<Disassembled> {
                     self.expr
                         .validate_and_collect(variant_item, &mut self.types, &mut self.error)
                 {
+                    // TODO: Fix this also
                     let pat_pred = self
                         .expr
                         .where_clause

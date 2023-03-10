@@ -113,6 +113,7 @@ impl PenumExpr {
 
             // Check if we have a impl statement, `(impl Trait, T)`.
             if let Type::ImplTrait(imptr) = &pfield.ty {
+                // TODO: Fix placeholder ident
                 let tty = format_ident!(
                     "__IMPL_{}",
                     string(&imptr.bounds)
