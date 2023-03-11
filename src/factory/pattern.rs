@@ -12,7 +12,7 @@ use crate::{
     utils::{string, PolymorphicMap},
 };
 
-use super::{pattern_match, ComparablePair, PunctuatedParameters, WhereClause, WherePredicate};
+use super::{pattern_match, ComparablePair, PunctuatedParameters, WhereClause, WherePredicate, ComparableItem};
 
 mod parse;
 mod to_tokens;
@@ -105,104 +105,8 @@ pub enum ParameterKind {
     Range(ExprRange),
 }
 
-impl PenumExpr {
-    const PLACEHOLDER_SYMBOL: &str = "_";
 
-    pub fn pattern_matching_on<'a>(&'a self, variant_item: &'a Variant) -> Option<ComparablePair> {
-        self.pattern
-            .iter()
-            .find_map(pattern_match(&variant_item.fields))
-    }
-
-    pub fn print_pattern(&self) -> String {
-        self.pattern
-            .iter()
-            .map(|s| s.to_token_stream().to_string())
-            .reduce(|acc, s| {
-                if acc.is_empty() {
-                    s
-                } else {
-                    format!("{acc} | {s}")
-                }
-            })
-            .unwrap()
-    }
-
-    pub fn validate_and_collect<'a>(
-        &'a mut self,
-        variant: &'a Variant,
-        types: &mut PolymorphicMap,
-        error: &mut Diagnostic,
-    ) -> Option<Punctuated<WherePredicate, Comma>> {
-        // A pattern can contain multiple shapes, e.g. `(_) | (_, _) | { name: _, age: usize }`
-        // So if the variant_item matches a shape, we associate the pattern with the variant.
-
-        let Some((group, ifields)) = self.pattern_matching_on(variant).map(Into::into) else {
-            error.extend(
-                variant.fields.span(),
-                format!(
-                    "`{}` doesn't match pattern `{}`",
-                    variant.to_token_stream(),
-                    self.print_pattern()
-                ),
-            );
-            return None;
-        };
-
-        // TODO: Before removing this, make sure to check `Group.iter()` function!
-        //       No support for empty unit iter, yet...
-        if group.is_unit() {
-            return None;
-        }
-
-        // TODO: Fix dubble push for where clause. i.e. move this outside the iterator.
-        let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
-        for (pat, item) in group.into_iter().zip(ifields.into_iter()) {
-            // If we cannot desctructure a pattern field, then it must be variadic.
-            let Some(pfield) = pat.get_field() else {
-                break;
-            };
-
-            let ity = string(&item.ty);
-
-            // Check if we have a impl statement, `(impl Trait, T)`.
-            if let Type::ImplTrait(imptr) = &pfield.ty {
-                // TODO: Fix placeholder ident
-                let tty = format_ident!(
-                    "__IMPL_{}",
-                    string(&imptr.bounds)
-                        .replace(' ', "_")
-                        .replace(['?', '\''], "")
-                );
-                let bounds = &imptr.bounds;
-                predicates.push(parse_quote!(#tty: #bounds));
-
-                let pty = tty.to_string();
-                // First we check if pty (T) exists in polymorphicmap.
-                // If it exists, insert new concrete type.
-                insert_polymap(types, pty, ity);
-            } else {
-                // Check if we are generic or concrete type.
-                let pty = string(&pfield.ty);
-                let is_generic = pty.eq(Self::PLACEHOLDER_SYMBOL) || pty.to_uppercase().eq(&pty);
-
-                // If pattern type is concrete, make sure it matches item type
-                if !is_generic && pty != ity {
-                    error.extend(item.ty.span(), format!("Found {ity} but expected {pty}."));
-                    continue;
-                } else {
-                    // First we check if pty (T) exists in polymorphicmap.
-                    // If it exists, insert new concrete type.
-                    insert_polymap(types, pty, ity);
-                }
-            }
-        }
-
-        (!predicates.is_empty()).then_some(predicates)
-    }
-}
-
-fn insert_polymap(types: &mut PolymorphicMap, pty: String, ity: String) {
+pub fn insert_polymap(types: &mut PolymorphicMap, pty: String, ity: String) {
     if let Some(set) = types.get_mut(pty.as_str()) {
         set.insert(ity);
     } else {
@@ -223,7 +127,7 @@ impl ParameterKind {
         matches!(self, ParameterKind::Range(_))
     }
 
-    fn get_field(&self) -> Option<&Field> {
+    pub fn get_field(&self) -> Option<&Field> {
         match self {
             ParameterKind::Regular(field) => Some(field),
             _ => None,

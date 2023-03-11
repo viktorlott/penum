@@ -4,8 +4,14 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::format_ident;
 use quote::ToTokens;
+use syn::Type;
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
 use syn::{parse_quote, spanned::Spanned, Error};
 
+use crate::factory::ComparableItem;
+use crate::factory::insert_polymap;
+use crate::factory::pattern_match;
 use crate::{
     error::Diagnostic,
     factory::{PenumExpr, Subject, WherePredicate},
@@ -43,19 +49,85 @@ impl Penum<Disassembled> {
                 "Expected to find at least one variant.",
             );
         } else {
-            // The validate and collect also works for adding `impl Trait` bounds to the pattern where clause.
-            enum_data.variants.iter().for_each(|variant_item| {
-                if let Some(preds) =
-                    self.expr
-                        .validate_and_collect(variant_item, &mut self.types, &mut self.error)
-                {
-                    // TODO: Fix this also
-                    let pat_pred = self.expr.clause.get_or_insert_with(|| parse_quote!(where));
-                    preds
-                        .iter()
-                        .for_each(|pred| pat_pred.predicates.push(parse_quote!(#pred)))
+            let comparable_patterns = self.expr.pattern.iter().map(|pattern| ComparableItem::from(&pattern.group)).collect::<Vec<_>>();
+            // TODO: Fix dubble push for where clause. i.e. move this outside the iterator.
+            let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
+            let pat = &self.expr.pattern;
+            self.subject.data.variants.iter().map(|variant_item| ComparableItem::from(&variant_item.fields)).for_each(|comp_item| {
+                let Some((group, ifields)) = comparable_patterns.iter().find_map(pattern_match(&comp_item)).map(Into::into) else {
+                    return self.error.extend(
+                        comp_item.value.span(),
+                        format!(
+                            "`{}` doesn't match pattern `{}`",
+                            comp_item.value.to_token_stream(),
+                            pat.iter()
+                            .map(|s| s.to_token_stream().to_string())
+                            .reduce(|acc, s| {
+                                if acc.is_empty() {
+                                    s
+                                } else {
+                                    format!("{acc} | {s}")
+                                }
+                            })
+                            .unwrap()
+                        ),
+                    );
+                    
+                };
+
+                // TODO: Before removing this, make sure to check `Group.iter()` function!
+                // No support for empty unit iter, yet...
+                if group.is_unit() {
+                    return;
+                }
+                
+                for (pat, item) in group.into_iter().zip(ifields.into_iter()) {
+                    // If we cannot desctructure a pattern field, then it must be variadic.
+                    let Some(pfield) = pat.get_field() else {
+                        break;
+                    };
+
+                    let ity = string(&item.ty);
+
+                    // Check if we have a impl statement, `(impl Trait, T)`.
+                    if let Type::ImplTrait(imptr) = &pfield.ty {
+                        // TODO: Fix placeholder ident
+                        let tty = format_ident!(
+                            "__IMPL_{}",
+                            string(&imptr.bounds)
+                                .replace(' ', "_")
+                                .replace(['?', '\''], "")
+                        );
+                        let bounds = &imptr.bounds;
+                        predicates.push(parse_quote!(#tty: #bounds));
+
+                        let pty = tty.to_string();
+                        // First we check if pty (T) exists in polymorphicmap.
+                        // If it exists, insert new concrete type.
+                        insert_polymap(&mut self.types, pty, ity);
+                    } else {
+                        // Check if we are generic or concrete type.
+                        let pty = string(&pfield.ty);
+                        let is_generic = pty.eq("_") || pty.to_uppercase().eq(&pty);
+
+                        // If pattern type is concrete, make sure it matches item type
+                        if !is_generic && pty != ity {
+                            self.error.extend(item.ty.span(), format!("Found {ity} but expected {pty}."));
+                            continue;
+                        } else {
+                            // First we check if pty (T) exists in polymorphicmap.
+                            // If it exists, insert new concrete type.
+                            insert_polymap(&mut self.types, pty, ity);
+                        }
+                    }
                 }
             });
+
+            // The validate and collect also works for adding `impl Trait` bounds to the pattern where clause.
+            let pat_pred = self.expr.clause.get_or_insert_with(|| parse_quote!(where));
+            predicates
+                .iter()
+                .for_each(|pred| pat_pred.predicates.push(parse_quote!(#pred)))
         }
 
         // SAFETY: Transmuting Self into Self with a different ZST is safe.

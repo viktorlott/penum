@@ -12,19 +12,18 @@ pub use subject::*;
 // TODO: Replace `Punctuated` with custom sequence type
 pub type PunctuatedParameters = Punctuated<ParameterKind, Token![,]>;
 
-pub struct MatchPair<'a>(&'a Composite, &'a Fields);
 pub struct ComparablePair<'disc>(
     /// Matched penum pattern
-    ComparableItem<'disc, Composite>,
+    &'disc ComparableItem<'disc, Composite>,
     /// Matched variant item
-    ComparableItem<'disc, Fields>,
+    &'disc ComparableItem<'disc, Fields>,
 );
 
 /// We use this to represent a Item that can be compared with another Item.
 ///
 pub struct ComparableItem<'disc, T> {
     /// To identify the discriminant of the composite type
-    discriminant: &'disc T,
+    pub value: &'disc T,
 
     /// Some(usize) implies it has variadic at position `usize`.
     variadic: Option<usize>,
@@ -36,14 +35,19 @@ pub struct ComparableItem<'disc, T> {
 /// We use this to identify what kind of pair we have matched.
 ///
 /// NOTE: Could probably have used discriminants instead..
-enum MatchResult {
-    /// Mathed either a `Named` or an `Unnamed` pair
+enum MatchKind {
+    /// Mathed either a `Named` or an `Unnamed` pair.
+    /// 
+    /// Compound matches implies that we have inner structure to continue comparing
     Compound,
 
     /// Matched a unit pair
+    /// 
+    /// Nullary matches implies that we satisfy the pattern shape, 
+    /// and that we don't need to compare inner structure
     Nullary,
 
-    // Nothing match
+    /// Nothing match
     None,
 }
 
@@ -78,28 +82,26 @@ impl<'disc> ComparablePair<'disc> {
         // TODO: Change this if we every choose to accept variadic at positions other than last. e.g (T, .., T) | (.., T)
         matches!(self, ComparablePair(p, i) if p.variadic.map(|_| p.arity - 1).unwrap_or_else(|| p.arity) <= i.arity )
     }
-}
 
-impl<'a> MatchPair<'a> {
-    fn pattern_match(&self) -> MatchResult {
-        match self {
-            MatchPair(&Composite::Named { .. }, &Fields::Named(..))
-            | MatchPair(&Composite::Unnamed { .. }, &Fields::Unnamed(..)) => MatchResult::Compound,
-            MatchPair(Composite::Unit, Fields::Unit) => MatchResult::Nullary,
-            _ => MatchResult::None,
+    fn match_kind(&self) -> MatchKind {
+        match (self.0.value, self.1.value) {
+            (&Composite::Named { .. }, &Fields::Named(..))
+            | (&Composite::Unnamed { .. }, &Fields::Unnamed(..)) => MatchKind::Compound,
+            (Composite::Unit, Fields::Unit) => MatchKind::Nullary,
+            _ => MatchKind::None,
         }
     }
 }
 
-fn pattern_match<'a>(fields: &'a Fields) -> impl FnMut(&'a PatFrag) -> Option<ComparablePair<'a>> {
+/// This is a very expensive way of finding a match. We should convert both into ComparableItems before looping over them.
+pub fn pattern_match<'a>(fields: &'a ComparableItem<Fields>) -> impl FnMut(&'a ComparableItem<Composite>) -> Option<ComparablePair<'a>> {
     // let cmp_item_fields = ComparableItem::from(fields);
+    // TODO: Rewrite this when it's possible so that we use comparable items instead.
+    move |shape: &ComparableItem<Composite>| {
+        let cmp_pair = ComparablePair::from((shape, fields));
 
-    move |shape: &PatFrag| {
-        let match_pair = MatchPair::from((&shape.group, fields));
-
-        match match_pair.pattern_match() {
-            MatchResult::Compound => {
-                let cmp_pair = ComparablePair::from(match_pair);
+        match cmp_pair.match_kind() {
+            MatchKind::Compound => {
 
                 if cmp_pair.has_variadic_last() {
                     cmp_pair
@@ -109,7 +111,7 @@ fn pattern_match<'a>(fields: &'a Fields) -> impl FnMut(&'a PatFrag) -> Option<Co
                     cmp_pair.check_arity_equality().then_some(cmp_pair)
                 }
             }
-            MatchResult::Nullary => Some(match_pair.into()),
+            MatchKind::Nullary => Some(cmp_pair),
             _ => None,
         }
     }
@@ -119,12 +121,12 @@ mod boilerplate {
     use super::*;
     impl<'disc> From<ComparablePair<'disc>> for (&'disc Composite, &'disc Fields) {
         fn from(val: ComparablePair<'disc>) -> Self {
-            (val.0.discriminant, val.1.discriminant)
+            (val.0.value, val.1.value)
         }
     }
 
-    impl<'a> From<(&'a Composite, &'a Fields)> for MatchPair<'a> {
-        fn from(value: (&'a Composite, &'a Fields)) -> Self {
+    impl<'a> From<(&'a ComparableItem<'a, Composite>, &'a ComparableItem<'a, Fields>)> for ComparablePair<'a> {
+        fn from(value: (&'a ComparableItem<Composite>, &'a ComparableItem<Fields>)) -> Self {
             Self(value.0, value.1)
         }
     }
@@ -132,7 +134,7 @@ mod boilerplate {
     impl<'disc> From<&'disc Composite> for ComparableItem<'disc, Composite> {
         fn from(value: &'disc Composite) -> Self {
             Self {
-                discriminant: value,
+                value,
                 variadic: value.get_variadic_position(),
                 arity: value.len(),
             }
@@ -142,16 +144,10 @@ mod boilerplate {
     impl<'disc> From<&'disc Fields> for ComparableItem<'disc, Fields> {
         fn from(value: &'disc Fields) -> Self {
             Self {
-                discriminant: value,
+                value,
                 variadic: None,
                 arity: value.len(),
             }
-        }
-    }
-
-    impl<'disc> From<MatchPair<'disc>> for ComparablePair<'disc> {
-        fn from(value: MatchPair<'disc>) -> Self {
-            Self(value.0.into(), value.1.into())
         }
     }
 }
