@@ -50,7 +50,6 @@ impl Penum<Disassembled> {
             );
         } else {
             let comparable_patterns = self.expr.pattern.iter().map(|pattern| ComparableItem::from(&pattern.group)).collect::<Vec<_>>();
-            // TODO: Fix dubble push for where clause. i.e. move this outside the iterator.
             let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
             let pat = &self.expr.pattern;
             self.subject.data.variants.iter().map(|variant_item| ComparableItem::from(&variant_item.fields)).for_each(|comp_item| {
