@@ -1,18 +1,16 @@
-use quote::{format_ident, ToTokens};
+
 use syn::{
     parse_quote,
     punctuated::{IntoIter, Iter, Punctuated},
-    spanned::Spanned,
-    token::{self, Comma},
-    ExprRange, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, Token, Type, Variant,
+    token::{self},
+    ExprRange, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, Token,
 };
 
 use crate::{
-    error::Diagnostic,
-    utils::{string, PolymorphicMap},
+    utils::{PolymorphicMap},
 };
 
-use super::{pattern_match, ComparablePair, PunctuatedParameters, WhereClause, WherePredicate, ComparableItem};
+use super::{PunctuatedParameters, WhereClause};
 
 mod parse;
 mod to_tokens;
