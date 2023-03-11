@@ -1,5 +1,7 @@
 #![allow(dead_code)]
-use syn::{punctuated::Punctuated, Fields, Token};
+use std::iter::Zip;
+
+use syn::{punctuated::Iter, punctuated::Punctuated, Field, Fields, Token};
 
 mod clause;
 mod pattern;
@@ -52,6 +54,24 @@ enum MatchKind {
 }
 
 impl<'disc> ComparablePair<'disc> {
+    /// Used to get access to composite methods.
+    ///
+    /// e.g. `is_unit()`
+    pub fn as_composite(&self) -> &Composite {
+        self.0.value
+    }
+
+    /// Given that we only allow variadic at the end lets us always be able to zip these together.
+    ///
+    pub fn zip(&self) -> Zip<Iter<ParameterKind>, Iter<Field>> {
+        if self.contains_residual() {
+            // Might be better to emit this as a compile error instead.
+            debug_assert!(self.has_variadic_last());
+        }
+
+        self.0.value.into_iter().zip(self.1.value.into_iter())
+    }
+
     /// Used to ensure that a matched pair have the same arity.
     ///
     /// If they do not we deduce that the item doesn't match our pattern.
@@ -79,7 +99,7 @@ impl<'disc> ComparablePair<'disc> {
     ///  
     /// Check if the item satisfies the minimum parameter length required.
     fn check_minimum_arity_satisfaction(&self) -> bool {
-        // TODO: Change this if we every choose to accept variadic at positions other than last. e.g (T, .., T) | (.., T)
+        // NOTE: Change this if we every choose to accept variadic at positions other than last. e.g (T, .., T) | (.., T)
         matches!(self, ComparablePair(p, i) if p.variadic.map(|_| p.arity - 1).unwrap_or_else(|| p.arity) <= i.arity )
     }
 

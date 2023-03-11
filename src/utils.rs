@@ -1,17 +1,42 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Deref,
+};
 
-use quote::ToTokens;
+use proc_macro2::Ident;
+use quote::{format_ident, ToTokens};
 use syn::{
     braced,
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     token::{self},
-    Token, Variant, WhereClause,
+    Token, TypeImplTrait, Variant, WhereClause,
 };
 
 use crate::factory::PatFrag;
 
-pub type PolymorphicMap = BTreeMap<String, BTreeSet<String>>;
+#[derive(Default)]
+pub struct PolymorphicMap(BTreeMap<String, BTreeSet<String>>);
+
+impl PolymorphicMap {
+    /// First we check if pty (T) exists in polymorphicmap.
+    /// If it exists, insert new concrete type.
+    pub fn insert_polymap(&mut self, pty: String, ity: String) {
+        if let Some(set) = self.0.get_mut(pty.as_str()) {
+            set.insert(ity);
+        } else {
+            self.0.insert(pty, vec![ity].into_iter().collect());
+        }
+    }
+}
+
+impl Deref for PolymorphicMap {
+    type Target = BTreeMap<String, BTreeSet<String>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatFrag>> {
     let mut shape = vec![input.call(parse_pattern_fragment)?];
@@ -52,6 +77,15 @@ pub fn parse_enum(
 
 pub fn string<T: ToTokens>(x: &T) -> String {
     x.to_token_stream().to_string()
+}
+
+pub fn ident_impl(imptr: &TypeImplTrait) -> Ident {
+    format_ident!(
+        "__IMPL_{}",
+        string(&imptr.bounds)
+            .replace(' ', "_")
+            .replace(['?', '\''], "")
+    )
 }
 
 pub fn no_match_found(item: &impl ToTokens, pat: &str) -> String {

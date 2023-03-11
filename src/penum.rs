@@ -9,12 +9,12 @@ use syn::token::Comma;
 use syn::Type;
 use syn::{parse_quote, spanned::Spanned, Error};
 
-use crate::factory::{insert_polymap, pattern_match};
+use crate::factory::pattern_match;
 
 use crate::{
     error::Diagnostic,
     factory::{PenumExpr, Subject, WherePredicate},
-    utils::{no_match_found, string, PolymorphicMap},
+    utils::{ident_impl, no_match_found, string, PolymorphicMap},
 };
 
 pub struct Disassembled;
@@ -42,33 +42,34 @@ impl Penum<Disassembled> {
     pub fn assemble(mut self) -> Penum<Assembled> {
         let enum_data = &self.subject.data;
 
-        if enum_data.variants.is_empty() {
-            self.error.extend(
-                enum_data.variants.span(),
-                "Expected to find at least one variant.",
-            );
-        } else { 
+        if !enum_data.variants.is_empty() {
+            // Prepare our patterns by converting them into ComparableItems.
             let comparable_patterns = self.expr.get_comparable_patterns();
-            let comparable_fields_iter = self.subject.get_comparable_fields();
 
+            // Might change this later, but the point is that as we check for equality, we also do impl assertions
+            // by extending the `subjects` where clause. This is something that we might want to change in the future
+            // and instead use `spanned_quote` or some other bound assertion.
             let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
 
             // Expecting failure, hence pre-calling
             let pattern_fmt = &self.expr.pattern_to_string();
 
-            for comp_item in comparable_fields_iter {
-                let Some((group, ifields)) = comparable_patterns.iter().find_map(pattern_match(&comp_item)).map(Into::into) else {
+            // For each variant => check if it matches a specified pattern
+            for comp_item in self.subject.get_comparable_fields() {
+                // 1. Check if we match in `shape`
+                let Some(matched_pair) = comparable_patterns.iter().find_map(pattern_match(&comp_item)) else {
                     self.error.extend(comp_item.value.span(), no_match_found(comp_item.value, pattern_fmt));
                     continue
                 };
 
-                // TODO: Before removing this, make sure to check `Group.iter()` function!
                 // No support for empty unit iter, yet...
-                if group.is_unit() {
+                // NOTE: Make sure to handle composite::unit iterator before removing this
+                if matched_pair.as_composite().is_unit() {
                     continue;
                 }
 
-                for (pat, item) in group.into_iter().zip(ifields.into_iter()) {
+                // 2. Check if we match in `structure`
+                for (pat, item) in matched_pair.zip() {
                     // If we cannot desctructure a pattern field, then it must be variadic.
                     let Some(pfield) = pat.get_field() else {
                         break;
@@ -76,22 +77,17 @@ impl Penum<Disassembled> {
 
                     let ity = string(&item.ty);
 
-                    // Check if we have a impl statement, `(impl Trait, T)`.
+                    // Check for impl expressions, `(impl Trait, T)`.
                     if let Type::ImplTrait(imptr) = &pfield.ty {
-                        // TODO: Fix placeholder ident
-                        let tty = format_ident!(
-                            "__IMPL_{}",
-                            string(&imptr.bounds)
-                                .replace(' ', "_")
-                                .replace(['?', '\''], "")
-                        );
+                        // We use a `dummy` identifier to store our bound under.
+                        let tty = ident_impl(imptr);
                         let bounds = &imptr.bounds;
+
                         predicates.push(parse_quote!(#tty: #bounds));
 
-                        let pty = tty.to_string();
                         // First we check if pty (T) exists in polymorphicmap.
                         // If it exists, insert new concrete type.
-                        insert_polymap(&mut self.types, pty, ity);
+                        self.types.insert_polymap(tty.to_string(), ity)
                     } else {
                         // Check if we are generic or concrete type.
                         let pty = string(&pfield.ty);
@@ -105,7 +101,7 @@ impl Penum<Disassembled> {
                         } else {
                             // First we check if pty (T) exists in polymorphicmap.
                             // If it exists, insert new concrete type.
-                            insert_polymap(&mut self.types, pty, ity);
+                            self.types.insert_polymap(pty, ity);
                         }
                     }
                 }
@@ -116,6 +112,11 @@ impl Penum<Disassembled> {
             predicates
                 .iter()
                 .for_each(|pred| pat_pred.predicates.push(parse_quote!(#pred)))
+        } else {
+            self.error.extend(
+                enum_data.variants.span(),
+                "Expected to find at least one variant.",
+            );
         }
 
         // SAFETY: Transmuting Self into Self with a different ZST is safe.

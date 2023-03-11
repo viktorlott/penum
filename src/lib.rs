@@ -48,11 +48,19 @@ mod utils;
 ///     Bur { num: f32 }
 /// }
 /// ```
-///
 /// Sometime we don't care about specifying a `where clause` and just want our enum to follow a specific `shape`.
 /// This is done by specifing `_`:
 /// ```rust
 /// #[penum( (_) | (_, _) | { num: _ } )]
+/// enum Foo {
+///     Bar(u32),
+///     Ber(u32, i32, i32),
+///     Bur { num: f32 }
+/// }
+/// ```
+/// If your not into generics, use `impl` expressions instead:
+/// ```rust
+/// #[penum( (impl Copy, ..) | { num: f32 }]
 /// enum Foo {
 ///     Bar(u32),
 ///     Ber(u32, i32, i32),

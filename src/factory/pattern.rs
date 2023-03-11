@@ -7,8 +7,6 @@ use syn::{
 
 use quote::ToTokens;
 
-use crate::utils::PolymorphicMap;
-
 use super::{ComparableItem, PunctuatedParameters, WhereClause};
 
 mod parse;
@@ -125,27 +123,25 @@ impl PenumExpr {
     }
 }
 
-pub fn insert_polymap(types: &mut PolymorphicMap, pty: String, ity: String) {
-    if let Some(set) = types.get_mut(pty.as_str()) {
-        set.insert(ity);
-    } else {
-        types.insert(pty, vec![ity].into_iter().collect());
-    }
-}
-
 impl ParameterKind {
+    /// This is useful when we just want to check if we should care about
+    /// checking the inner structure of ParameterKind.
     pub fn is_field(&self) -> bool {
         matches!(self, ParameterKind::Regular(_))
     }
 
+    /// Used in ComparablePair method calls to check if a parameter is variadic
     pub fn is_variadic(&self) -> bool {
         matches!(self, ParameterKind::Variadic(_))
     }
 
+    /// We currently don't use this one
     pub fn is_range(&self) -> bool {
         matches!(self, ParameterKind::Range(_))
     }
 
+    /// This is basically the same as `is_field` but instead of returning a boolean,
+    /// we return an Option<&Field> if self is a field.
     pub fn get_field(&self) -> Option<&Field> {
         match self {
             ParameterKind::Regular(field) => Some(field),
@@ -233,44 +229,47 @@ impl Composite {
         }
     }
 }
+mod boilerplate {
+    use super::*;
 
-impl From<&Fields> for Composite {
-    fn from(value: &Fields) -> Self {
-        match value {
-            Fields::Named(FieldsNamed { named, brace_token }) => Composite::Named {
-                parameters: parse_quote!(#named),
-                delimiter: *brace_token,
-            },
-            Fields::Unnamed(FieldsUnnamed {
-                unnamed,
-                paren_token,
-            }) => Composite::Unnamed {
-                parameters: parse_quote!(#unnamed),
-                delimiter: *paren_token,
-            },
-            Fields::Unit => Composite::Unit,
+    impl From<&Fields> for Composite {
+        fn from(value: &Fields) -> Self {
+            match value {
+                Fields::Named(FieldsNamed { named, brace_token }) => Composite::Named {
+                    parameters: parse_quote!(#named),
+                    delimiter: *brace_token,
+                },
+                Fields::Unnamed(FieldsUnnamed {
+                    unnamed,
+                    paren_token,
+                }) => Composite::Unnamed {
+                    parameters: parse_quote!(#unnamed),
+                    delimiter: *paren_token,
+                },
+                Fields::Unit => Composite::Unit,
+            }
         }
     }
-}
 
-impl IntoIterator for Composite {
-    type Item = ParameterKind;
-    type IntoIter = IntoIter<ParameterKind>;
+    impl IntoIterator for Composite {
+        type Item = ParameterKind;
+        type IntoIter = IntoIter<ParameterKind>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            Composite::Unit => Punctuated::<ParameterKind, ()>::new().into_iter(),
-            Composite::Named { parameters, .. } => parameters.into_iter(),
-            Composite::Unnamed { parameters, .. } => parameters.into_iter(),
+        fn into_iter(self) -> Self::IntoIter {
+            match self {
+                Composite::Unit => Punctuated::<ParameterKind, ()>::new().into_iter(),
+                Composite::Named { parameters, .. } => parameters.into_iter(),
+                Composite::Unnamed { parameters, .. } => parameters.into_iter(),
+            }
         }
     }
-}
 
-impl<'a> IntoIterator for &'a Composite {
-    type Item = &'a ParameterKind;
-    type IntoIter = Iter<'a, ParameterKind>;
+    impl<'a> IntoIterator for &'a Composite {
+        type Item = &'a ParameterKind;
+        type IntoIter = Iter<'a, ParameterKind>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
+        fn into_iter(self) -> Self::IntoIter {
+            self.iter()
+        }
     }
 }

@@ -143,6 +143,17 @@ enum Foo {
 }
 ```
 
+..or you could just use `impl` expressions instead.
+```rust
+#[penum( (impl Copy, ..) | { num: f32 } )]
+enum Foo {
+    Bar(u32), 
+    Bor(i32, f32), 
+    Ber(u32, i32), 
+    Bur { num: f32 }
+}
+```
+
 ## Demo
 ```rust
 use penum::shape;
