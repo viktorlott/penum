@@ -1,8 +1,7 @@
 use syn::{
-    parse_quote,
-    punctuated::{IntoIter, Iter, Punctuated},
+    punctuated::{Iter, Punctuated},
     token::{self},
-    ExprRange, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, Token,
+    ExprRange, Field, Ident, Token,
 };
 
 use quote::ToTokens;
@@ -167,11 +166,13 @@ impl Composite {
         thread_local! {static EMPTY_SLICE_ITER: Punctuated<ParameterKind, ()> = Punctuated::new();}
 
         match self {
-            // UNSAFE: Don't do this sh*t. The thing is that we are transmuting an empty iter that
-            //         is created from a static Punctuated struct. The lifetime is invariant in Iter<'_>
-            //         which mean that we are not allowed to return another lifetime, even if it outlives 'a.
-            //         It should be "okay" given its static and empty, but I'm not 100% sure if this actually
-            //         can cause UB.
+            // "SAFETY": This is not recommended. The thing is that we are transmuting an empty iter that
+            //           is created from a static Punctuated struct. The lifetime is invariant in Iter<'_>
+            //           which mean that we are not allowed to return another lifetime, even if it outlives 'a.
+            //           It should be "okay" given its static and empty, but I'm not 100% sure if this actually
+            //           can cause UB. Adding to this, it's not currently possible to get here right now because
+            //           of the if statement in `penum::assemble->is_unit()->continue`. So this could also be marked
+            //           as `unreachable`.
             Composite::Unit => EMPTY_SLICE_ITER.with(|f| unsafe { std::mem::transmute(f.iter()) }),
             // Group::Unit => panic!("Empty Iter is unsupported right now."),
             Composite::Named { parameters, .. } => parameters.iter(),

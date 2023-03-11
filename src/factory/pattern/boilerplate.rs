@@ -1,17 +1,10 @@
 use syn::{
     parse_quote,
     punctuated::{IntoIter, Iter, Punctuated},
-    token::{self},
-    ExprRange, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, Token,
+    Fields, FieldsNamed, FieldsUnnamed,
 };
 
-use quote::ToTokens;
-
-use super::{Comparable, PunctuatedParameters, WhereClause};
-
 use crate::factory::{Composite, ParameterKind};
-
-use super::*;
 
 impl From<&Fields> for Composite {
     fn from(value: &Fields) -> Self {

@@ -131,8 +131,6 @@ impl<'disc> ComparablePatterns<'disc> {
 pub fn pattern_match<'a>(
     fields: &'a Comparable<Fields>,
 ) -> impl FnMut(&'a Comparable<Composite>) -> Option<ComparablePair<'a>> {
-    // let cmp_item_fields = ComparableItem::from(fields);
-    // TODO: Rewrite this when it's possible so that we use comparable items instead.
     move |shape: &Comparable<Composite>| {
         let cmp_pair = ComparablePair::from((shape, fields));
 

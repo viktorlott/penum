@@ -52,13 +52,13 @@ impl Penum<Disassembled> {
             let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
 
             // Expecting failure, hence pre-calling
-            let pattern_fmt = &self.expr.pattern_to_string();
+            let pattern_fmt = self.expr.pattern_to_string();
 
             // For each variant => check if it matches a specified pattern
             for comp_item in self.subject.get_comparable_fields() {
                 // 1. Check if we match in `shape`
                 let Some(matched_pair) = comparable_patterns.compare(&comp_item) else {
-                    self.error.extend(comp_item.value.span(), no_match_found(comp_item.value, pattern_fmt));
+                    self.error.extend(comp_item.value.span(), no_match_found(comp_item.value, &pattern_fmt));
                     continue
                 };
 
@@ -69,16 +69,17 @@ impl Penum<Disassembled> {
                 }
 
                 // 2. Check if we match in `structure`. (We are naively always expecting to never have infixed variadics)
-                for (pat, item) in matched_pair.zip() {
+                for (pat_param, item_field) in matched_pair.zip() {
                     // If we cannot desctructure a pattern field, then it must be variadic.
-                    let Some(pfield) = pat.get_field() else {
+                    // This might change later
+                    let Some(pat_field) = pat_param.get_field() else {
                         break;
                     };
 
-                    let ity = string(&item.ty);
+                    let item_ty = string(&item_field.ty);
 
                     // Check for impl expressions, `(impl Trait, T)`.
-                    if let Type::ImplTrait(imptr) = &pfield.ty {
+                    if let Type::ImplTrait(imptr) = &pat_field.ty {
                         // We use a `dummy` identifier to store our bound under.
                         let tty = ident_impl(imptr);
                         let bounds = &imptr.bounds;
@@ -87,21 +88,23 @@ impl Penum<Disassembled> {
 
                         // First we check if pty (T) exists in polymorphicmap.
                         // If it exists, insert new concrete type.
-                        self.types.insert_polymap(tty.to_string(), ity)
+                        self.types.polymap_insert(tty.to_string(), item_ty)
                     } else {
                         // Check if we are generic or concrete type.
-                        let pty = string(&pfield.ty);
-                        let is_generic = pty.eq("_") || pty.to_uppercase().eq(&pty);
+                        let pat_ty = string(&pat_field.ty);
+                        let is_generic = pat_ty.eq("_") || pat_ty.to_uppercase().eq(&pat_ty);
 
                         // If pattern type is concrete, make sure it matches item type
-                        if !is_generic && pty != ity {
-                            self.error
-                                .extend(item.ty.span(), format!("Found {ity} but expected {pty}."));
+                        if !is_generic && pat_ty != item_ty {
+                            self.error.extend(
+                                item_field.ty.span(),
+                                format!("Found {item_ty} but expected {pat_ty}."),
+                            );
                             continue;
                         } else {
                             // First we check if pty (T) exists in polymorphicmap.
                             // If it exists, insert new concrete type.
-                            self.types.insert_polymap(pty, ity);
+                            self.types.polymap_insert(pat_ty, item_ty);
                         }
                     }
                 }
@@ -109,6 +112,7 @@ impl Penum<Disassembled> {
 
             // The validate and collect also works for adding `impl Trait` bounds to the pattern where clause.
             let pat_pred = self.expr.clause.get_or_insert_with(|| parse_quote!(where));
+
             predicates
                 .iter()
                 .for_each(|pred| pat_pred.predicates.push(parse_quote!(#pred)))

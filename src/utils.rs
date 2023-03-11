@@ -21,7 +21,7 @@ pub struct PolymorphicMap(BTreeMap<String, BTreeSet<String>>);
 impl PolymorphicMap {
     /// First we check if pty (T) exists in polymorphicmap.
     /// If it exists, insert new concrete type.
-    pub fn insert_polymap(&mut self, pty: String, ity: String) {
+    pub fn polymap_insert(&mut self, pty: String, ity: String) {
         if let Some(set) = self.0.get_mut(pty.as_str()) {
             set.insert(ity);
         } else {
