@@ -12,52 +12,103 @@ use crate::{
     utils::{string, PolymorphicMap},
 };
 
-use super::{pattern_match, MatchPair, PunctuatedParameters, WhereClause, WherePredicate};
+use super::{pattern_match, ComparablePair, PunctuatedParameters, WhereClause, WherePredicate};
 
 mod parse;
 mod to_tokens;
 
-/// A Penum expression consists of one or more patterns, and an optional WhereClause.
+/// #### A Penum expression consists of one or more patterns, and an optional WhereClause.
+///
+/// ```text
+/// (T) | { name: T }   where T: Clone
+/// ^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^
+/// <Pattern>           <clause>
+/// ```
 pub struct PenumExpr {
-    pub pattern: Vec<PatternFrag>,
-    pub where_clause: Option<WhereClause>,
+    /// Used for matching against incoming variants
+    pub pattern: Vec<PatFrag>,
+
+    /// Contains an optional where clause with one or more where predicates.
+    pub clause: Option<WhereClause>,
 }
 
-pub struct PatternFrag {
+/// #### Pattern fragments are used as constituents for the Penum expression composite type.
+///
+/// A group can only contain one group type.
+/// ```text
+///  Variant    () | (T, T) | { name: T }
+///  ^^^^^^^    ^^   ^^^^^^   ^^^^^^^^^^^
+///  <Ident>    <Composite>
+/// ```
+pub struct PatFrag {
+    /// An optional identifier that is currently only used to mark nullary variants.
     pub ident: Option<Ident>,
-    pub group: Group,
+
+    /// A group is a composite of zero or more ParameterKinds surrounded by a delimiter
+    pub group: Composite,
 }
 
-pub enum Group {
+/// #### A composite can come in 3 flavors:
+///
+/// ```text
+/// { ParameterKind,* } | (ParameterKind,*) | ()
+/// ^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^   ^^
+/// <Named>               <Unnamed>           <Unit>
+/// ```
+pub enum Composite {
+    /// Represents a `struct`-like pattern
     Named {
         parameters: PunctuatedParameters,
         delimiter: token::Brace,
     },
+
+    /// Represents a `tuple`-like pattern
     Unnamed {
         parameters: PunctuatedParameters,
         delimiter: token::Paren,
     },
+
+    /// Represents a `Unit`-like pattern
     Unit,
 }
 
-pub enum Parameter {
-    Regular(Field),
+/// #### A parameter comes in different flavors:
+///
+/// ```text
+/// Ident: Type   |   Type     |  ..
+/// ^^^^^^^^^^^       ^^^^        ^^
+/// <Field>           <Field>     <Variadic>
+/// ```
+///
+/// Given that the `Regular(Field)` can also either be `named` or `unnamed`, it's possible to use a
+/// `ParameterKind::Regular->Named` field inside a `GroupKind::Unnamed-Parameters` composite type.
+pub enum ParameterKind {
+    /// We use this to represent a `normal` field, that is, a field that is either `named` or `unnamed`.
     ///
-    /// ```rust
-    ///     (T, U, ..)
-    ///     (T, U, ..10)    // NOT SUPPORTED
-    ///     (T, U, ...)     // NOT SUPPORTED
-    ///     (T, U, ..Copy)  // NOT SUPPORTED
-    ///     (T, U, Copy..2) // NOT SUPPORTED
-    /// ```
+    /// This is done by having the `ident` and `colon_token` fields be optional.
+    Regular(Field),
+
+    /// We use this to represent that we don't care amount the left over arguments.
+    ///
+    /// The use for variadic fields are currently only supported in the last argument position.
     Variadic(Token![..]),
+
+    /// Use `Variadic(Token![..])` instead.
+    ///
+    /// Supported `>` Not supported
+    /// ```text
+    /// (T, ..) > (T, ..10) (T, ...) (T, ..Copy) (T, Copy..2)
+    ///     ^^        ^^^^      ^^^      ^^^^^^      ^^^^^^^
+    ///
+    /// Variadic(Token![..]) > Range(ExprRange)
+    /// ```
     Range(ExprRange),
 }
 
 impl PenumExpr {
     const PLACEHOLDER_SYMBOL: &str = "_";
 
-    pub fn pattern_matching_on<'a>(&'a self, variant_item: &'a Variant) -> Option<MatchPair> {
+    pub fn pattern_matching_on<'a>(&'a self, variant_item: &'a Variant) -> Option<ComparablePair> {
         self.pattern
             .iter()
             .find_map(pattern_match(&variant_item.fields))
@@ -85,7 +136,8 @@ impl PenumExpr {
     ) -> Option<Punctuated<WherePredicate, Comma>> {
         // A pattern can contain multiple shapes, e.g. `(_) | (_, _) | { name: _, age: usize }`
         // So if the variant_item matches a shape, we associate the pattern with the variant.
-        let Some((group, ifields)) = self.pattern_matching_on(variant) else {
+
+        let Some((group, ifields)) = self.pattern_matching_on(variant).map(Into::into) else {
             error.extend(
                 variant.fields.span(),
                 format!(
@@ -157,38 +209,39 @@ fn insert_polymap(types: &mut PolymorphicMap, pty: String, ity: String) {
         types.insert(pty, vec![ity].into_iter().collect());
     }
 }
-impl Parameter {
+
+impl ParameterKind {
     pub fn is_field(&self) -> bool {
-        matches!(self, Parameter::Regular(_))
+        matches!(self, ParameterKind::Regular(_))
     }
 
     pub fn is_variadic(&self) -> bool {
-        matches!(self, Parameter::Variadic(_))
+        matches!(self, ParameterKind::Variadic(_))
     }
 
     pub fn is_range(&self) -> bool {
-        matches!(self, Parameter::Range(_))
+        matches!(self, ParameterKind::Range(_))
     }
 
     fn get_field(&self) -> Option<&Field> {
         match self {
-            Parameter::Regular(field) => Some(field),
+            ParameterKind::Regular(field) => Some(field),
             _ => None,
         }
     }
 }
 
-impl Group {
+impl Composite {
     pub fn len(&self) -> usize {
         match self {
-            Group::Named { parameters, .. } => parameters.len(),
-            Group::Unnamed { parameters, .. } => parameters.len(),
-            Group::Unit => 0,
+            Composite::Named { parameters, .. } => parameters.len(),
+            Composite::Unnamed { parameters, .. } => parameters.len(),
+            Composite::Unit => 0,
         }
     }
 
-    pub fn iter(&self) -> Iter<'_, Parameter> {
-        thread_local! {static EMPTY_SLICE_ITER: Punctuated<Parameter, ()> = Punctuated::new();}
+    pub fn iter(&self) -> Iter<'_, ParameterKind> {
+        thread_local! {static EMPTY_SLICE_ITER: Punctuated<ParameterKind, ()> = Punctuated::new();}
 
         match self {
             // UNSAFE: Don't do this sh*t. The thing is that we are transmuting an empty iter that
@@ -196,89 +249,103 @@ impl Group {
             //         which mean that we are not allowed to return another lifetime, even if it outlives 'a.
             //         It should be "okay" given its static and empty, but I'm not 100% sure if this actually
             //         can cause UB.
-            Group::Unit => EMPTY_SLICE_ITER.with(|f| unsafe { std::mem::transmute(f.iter()) }),
+            Composite::Unit => EMPTY_SLICE_ITER.with(|f| unsafe { std::mem::transmute(f.iter()) }),
             // Group::Unit => panic!("Empty Iter is unsupported right now."),
-            Group::Named { parameters, .. } => parameters.iter(),
-            Group::Unnamed { parameters, .. } => parameters.iter(),
+            Composite::Named { parameters, .. } => parameters.iter(),
+            Composite::Unnamed { parameters, .. } => parameters.iter(),
         }
     }
 
     pub fn is_unit(&self) -> bool {
-        matches!(self, Group::Unit)
+        matches!(self, Composite::Unit)
     }
 
     pub fn has_variadic(&self) -> bool {
         match self {
-            Group::Named { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
-            Group::Unnamed { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
-            Group::Unit => false,
+            Composite::Named { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
+            Composite::Unnamed { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
+            Composite::Unit => false,
+        }
+    }
+
+    pub fn get_variadic_position(&self) -> Option<usize> {
+        match self {
+            Composite::Named { parameters, .. } => parameters
+                .iter()
+                .enumerate()
+                .find_map(|(pos, fk)| fk.is_variadic().then_some(pos)),
+            Composite::Unnamed { parameters, .. } => parameters
+                .iter()
+                .enumerate()
+                .find_map(|(pos, fk)| fk.is_variadic().then_some(pos)),
+            Composite::Unit => None,
         }
     }
 
     pub fn has_last_variadic(&self) -> bool {
         match self {
-            Group::Named { parameters, .. } => {
+            Composite::Named { parameters, .. } => {
                 matches!(parameters.iter().last().take(), Some(val) if val.is_variadic())
             }
-            Group::Unnamed { parameters, .. } => {
+            Composite::Unnamed { parameters, .. } => {
                 matches!(parameters.iter().last().take(), Some(val) if val.is_variadic())
             }
-            Group::Unit => false,
+            Composite::Unit => false,
         }
     }
 
-    pub fn count_with(&self, mut f: impl FnMut(&Parameter) -> bool) -> usize {
+    pub fn count_with(&self, mut f: impl FnMut(&ParameterKind) -> bool) -> usize {
         match self {
-            Group::Named { parameters, .. } => {
+            Composite::Named { parameters, .. } => {
                 parameters
                     .iter()
                     .fold(0, |acc, fk| if f(fk) { acc + 1 } else { acc })
             }
-            Group::Unnamed { parameters, .. } => {
+            Composite::Unnamed { parameters, .. } => {
                 parameters
                     .iter()
                     .fold(0, |acc, fk| if f(fk) { acc + 1 } else { acc })
             }
-            Group::Unit => 0,
+            Composite::Unit => 0,
         }
     }
 }
 
-impl From<&Fields> for Group {
+impl From<&Fields> for Composite {
     fn from(value: &Fields) -> Self {
         match value {
-            Fields::Named(FieldsNamed { named, brace_token }) => Group::Named {
+            Fields::Named(FieldsNamed { named, brace_token }) => Composite::Named {
                 parameters: parse_quote!(#named),
                 delimiter: *brace_token,
             },
             Fields::Unnamed(FieldsUnnamed {
                 unnamed,
                 paren_token,
-            }) => Group::Unnamed {
+            }) => Composite::Unnamed {
                 parameters: parse_quote!(#unnamed),
                 delimiter: *paren_token,
             },
-            Fields::Unit => Group::Unit,
+            Fields::Unit => Composite::Unit,
         }
     }
 }
 
-impl IntoIterator for Group {
-    type Item = Parameter;
-    type IntoIter = IntoIter<Parameter>;
+impl IntoIterator for Composite {
+    type Item = ParameterKind;
+    type IntoIter = IntoIter<ParameterKind>;
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            Group::Unit => Punctuated::<Parameter, ()>::new().into_iter(),
-            Group::Named { parameters, .. } => parameters.into_iter(),
-            Group::Unnamed { parameters, .. } => parameters.into_iter(),
+            Composite::Unit => Punctuated::<ParameterKind, ()>::new().into_iter(),
+            Composite::Named { parameters, .. } => parameters.into_iter(),
+            Composite::Unnamed { parameters, .. } => parameters.into_iter(),
         }
     }
 }
 
-impl<'a> IntoIterator for &'a Group {
-    type Item = &'a Parameter;
-    type IntoIter = Iter<'a, Parameter>;
+impl<'a> IntoIterator for &'a Composite {
+    type Item = &'a ParameterKind;
+    type IntoIter = Iter<'a, ParameterKind>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()

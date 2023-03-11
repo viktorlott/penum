@@ -1,37 +1,37 @@
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 
-use super::{Group, Parameter, PatternFrag};
+use super::{Composite, ParameterKind, PatFrag};
 
-impl ToTokens for PatternFrag {
+impl ToTokens for PatFrag {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         self.ident.to_tokens(tokens);
         self.group.to_tokens(tokens);
     }
 }
 
-impl ToTokens for Parameter {
+impl ToTokens for ParameterKind {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
-            Parameter::Regular(f) => f.to_tokens(tokens),
-            Parameter::Variadic(v) => v.to_tokens(tokens),
-            Parameter::Range(r) => r.to_tokens(tokens),
+            ParameterKind::Regular(f) => f.to_tokens(tokens),
+            ParameterKind::Variadic(v) => v.to_tokens(tokens),
+            ParameterKind::Range(r) => r.to_tokens(tokens),
         }
     }
 }
 
-impl ToTokens for Group {
+impl ToTokens for Composite {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
-            Group::Named {
+            Composite::Named {
                 parameters,
                 delimiter,
             } => delimiter.surround(tokens, |tokens| parameters.to_tokens(tokens)),
-            Group::Unnamed {
+            Composite::Unnamed {
                 parameters,
                 delimiter,
             } => delimiter.surround(tokens, |tokens| parameters.to_tokens(tokens)),
-            Group::Unit => (),
+            Composite::Unit => (),
         }
     }
 }

@@ -9,11 +9,11 @@ use syn::{
     Token, Variant, WhereClause,
 };
 
-use crate::factory::PatternFrag;
+use crate::factory::PatFrag;
 
 pub type PolymorphicMap = BTreeMap<String, BTreeSet<String>>;
 
-pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatternFrag>> {
+pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatFrag>> {
     let mut shape = vec![input.call(parse_pattern_fragment)?];
 
     while input.peek(token::Or) {
@@ -24,11 +24,11 @@ pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatternFrag>> {
     Ok(shape)
 }
 
-pub fn parse_pattern_fragment(input: ParseStream) -> syn::Result<PatternFrag> {
+pub fn parse_pattern_fragment(input: ParseStream) -> syn::Result<PatFrag> {
     if input.peek(Token![$]) {
         let _: Token![$] = input.parse()?;
     }
-    Ok(PatternFrag {
+    Ok(PatFrag {
         ident: input.parse()?,
         group: input.parse()?,
     })

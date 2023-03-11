@@ -6,13 +6,13 @@ use syn::{
 
 use crate::utils::parse_pattern;
 
-use super::{Group, Parameter, PatternFrag, PenumExpr};
+use super::{Composite, ParameterKind, PatFrag, PenumExpr};
 
 impl Parse for PenumExpr {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(Self {
             pattern: input.call(parse_pattern)?,
-            where_clause: {
+            clause: {
                 if input.peek(Token![where]) {
                     Some(input.parse()?)
                 } else {
@@ -23,50 +23,50 @@ impl Parse for PenumExpr {
     }
 }
 
-impl Parse for PatternFrag {
+impl Parse for PatFrag {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         if input.peek(Token![$]) {
             input.parse::<Token![$]>()?;
         }
 
-        Ok(PatternFrag {
+        Ok(PatFrag {
             ident: input.parse()?,
             group: input.parse()?,
         })
     }
 }
 
-impl Parse for Group {
+impl Parse for Composite {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let content;
         Ok(if input.peek(token::Brace) {
             let token = braced!(content in input);
-            Group::Named {
-                parameters: content.parse_terminated(Parameter::parse)?,
+            Composite::Named {
+                parameters: content.parse_terminated(ParameterKind::parse)?,
                 delimiter: token,
             }
         } else if input.peek(token::Paren) {
             let token = parenthesized!(content in input);
-            Group::Unnamed {
-                parameters: content.parse_terminated(Parameter::parse)?,
+            Composite::Unnamed {
+                parameters: content.parse_terminated(ParameterKind::parse)?,
                 delimiter: token,
             }
         } else {
-            Group::Unit
+            Composite::Unit
         })
     }
 }
 
-impl Parse for Parameter {
+impl Parse for ParameterKind {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(if input.peek(Token![..]) && input.peek2(LitInt) {
-            Parameter::Range(input.parse()?)
+            ParameterKind::Range(input.parse()?)
         } else if input.peek(Token![..]) {
-            Parameter::Variadic(input.parse()?)
+            ParameterKind::Variadic(input.parse()?)
         } else if input.peek(Ident) && input.peek2(Token![:]) {
-            Parameter::Regular(input.call(Field::parse_named)?)
+            ParameterKind::Regular(input.call(Field::parse_named)?)
         } else {
-            Parameter::Regular(input.call(Field::parse_unnamed)?)
+            ParameterKind::Regular(input.call(Field::parse_unnamed)?)
         })
     }
 }

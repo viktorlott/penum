@@ -50,10 +50,7 @@ impl Penum<Disassembled> {
                         .validate_and_collect(variant_item, &mut self.types, &mut self.error)
                 {
                     // TODO: Fix this also
-                    let pat_pred = self
-                        .expr
-                        .where_clause
-                        .get_or_insert_with(|| parse_quote!(where));
+                    let pat_pred = self.expr.clause.get_or_insert_with(|| parse_quote!(where));
                     preds
                         .iter()
                         .for_each(|pred| pat_pred.predicates.push(parse_quote!(#pred)))
@@ -91,7 +88,7 @@ impl Penum<Assembled> {
 
     fn link_bounds(self: &mut Penum<Assembled>) -> Vec<TokenStream2> {
         let mut bound_tokens = Vec::new();
-        if let Some(where_cl) = self.expr.where_clause.as_ref() {
+        if let Some(where_cl) = self.expr.clause.as_ref() {
             where_cl
                 .predicates
                 .iter()
