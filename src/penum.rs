@@ -9,13 +9,12 @@ use syn::token::Comma;
 use syn::Type;
 use syn::{parse_quote, spanned::Spanned, Error};
 
-use crate::factory::insert_polymap;
-use crate::factory::pattern_match;
-use crate::factory::ComparableItem;
+use crate::factory::{insert_polymap, pattern_match};
+
 use crate::{
     error::Diagnostic,
     factory::{PenumExpr, Subject, WherePredicate},
-    utils::{string, PolymorphicMap},
+    utils::{no_match_found, string, PolymorphicMap},
 };
 
 pub struct Disassembled;
@@ -48,46 +47,27 @@ impl Penum<Disassembled> {
                 enum_data.variants.span(),
                 "Expected to find at least one variant.",
             );
-        } else {
-            let comparable_patterns = self
-                .expr
-                .pattern
-                .iter()
-                .map(|pattern| ComparableItem::from(&pattern.group))
-                .collect::<Vec<_>>();
+        } else { 
+            let comparable_patterns = self.expr.get_comparable_patterns();
+            let comparable_fields_iter = self.subject.get_comparable_fields();
+
             let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
-            let pattern_fmt = &self
-                .expr
-                .pattern
-                .iter()
-                .map(|s| s.to_token_stream().to_string())
-                .reduce(|acc, s| {
-                    if acc.is_empty() {
-                        s
-                    } else {
-                        format!("{acc} | {s}")
-                    }
-                })
-                .unwrap();
-            self.subject.data.variants.iter().map(|variant_item| ComparableItem::from(&variant_item.fields)).for_each(|comp_item| {
+
+            // Expecting failure, hence pre-calling
+            let pattern_fmt = &self.expr.pattern_to_string();
+
+            for comp_item in comparable_fields_iter {
                 let Some((group, ifields)) = comparable_patterns.iter().find_map(pattern_match(&comp_item)).map(Into::into) else {
-                    return self.error.extend(
-                        comp_item.value.span(),
-                        format!(
-                            "`{}` doesn't match pattern `{}`",
-                            comp_item.value.to_token_stream(),
-                            pattern_fmt
-                        ),
-                    );
-                    
+                    self.error.extend(comp_item.value.span(), no_match_found(comp_item.value, pattern_fmt));
+                    continue
                 };
 
                 // TODO: Before removing this, make sure to check `Group.iter()` function!
                 // No support for empty unit iter, yet...
                 if group.is_unit() {
-                    return;
+                    continue;
                 }
-                
+
                 for (pat, item) in group.into_iter().zip(ifields.into_iter()) {
                     // If we cannot desctructure a pattern field, then it must be variadic.
                     let Some(pfield) = pat.get_field() else {
@@ -119,7 +99,8 @@ impl Penum<Disassembled> {
 
                         // If pattern type is concrete, make sure it matches item type
                         if !is_generic && pty != ity {
-                            self.error.extend(item.ty.span(), format!("Found {ity} but expected {pty}."));
+                            self.error
+                                .extend(item.ty.span(), format!("Found {ity} but expected {pty}."));
                             continue;
                         } else {
                             // First we check if pty (T) exists in polymorphicmap.
@@ -128,7 +109,7 @@ impl Penum<Disassembled> {
                         }
                     }
                 }
-            });
+            }
 
             // The validate and collect also works for adding `impl Trait` bounds to the pattern where clause.
             let pat_pred = self.expr.clause.get_or_insert_with(|| parse_quote!(where));

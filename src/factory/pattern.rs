@@ -5,9 +5,11 @@ use syn::{
     ExprRange, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, Token,
 };
 
+use quote::ToTokens;
+
 use crate::utils::PolymorphicMap;
 
-use super::{PunctuatedParameters, WhereClause};
+use super::{ComparableItem, PunctuatedParameters, WhereClause};
 
 mod parse;
 mod to_tokens;
@@ -98,6 +100,29 @@ pub enum ParameterKind {
     /// Variadic(Token![..]) > Range(ExprRange)
     /// ```
     Range(ExprRange),
+}
+
+impl PenumExpr {
+    pub fn pattern_to_string(&self) -> String {
+        self.pattern
+            .iter()
+            .map(|s| s.to_token_stream().to_string())
+            .reduce(|acc, s| {
+                if acc.is_empty() {
+                    s
+                } else {
+                    format!("{acc} | {s}")
+                }
+            })
+            .unwrap()
+    }
+
+    pub fn get_comparable_patterns(&self) -> Vec<ComparableItem<Composite>> {
+        self.pattern
+            .iter()
+            .map(|pattern| ComparableItem::from(&pattern.group))
+            .collect()
+    }
 }
 
 pub fn insert_polymap(types: &mut PolymorphicMap, pty: String, ity: String) {

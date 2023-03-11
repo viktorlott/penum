@@ -54,6 +54,14 @@ pub fn string<T: ToTokens>(x: &T) -> String {
     x.to_token_stream().to_string()
 }
 
+pub fn no_match_found(item: &impl ToTokens, pat: &str) -> String {
+    format!(
+        "`{}` doesn't match pattern `{}`",
+        item.to_token_stream(),
+        pat
+    )
+}
+
 // let ty_span = pred.span();
 // let assert_sync = quote_spanned!{ty_span=>
 //     struct _AssertSync where #pred: Sync;
