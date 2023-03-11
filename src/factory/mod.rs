@@ -14,16 +14,20 @@ pub use subject::*;
 // TODO: Replace `Punctuated` with custom sequence type
 pub type PunctuatedParameters = Punctuated<ParameterKind, Token![,]>;
 
+// ComPairAble would be a stupid name
 pub struct ComparablePair<'disc>(
     /// Matched penum pattern
-    &'disc ComparableItem<'disc, Composite>,
+    &'disc Comparable<'disc, Composite>,
     /// Matched variant item
-    &'disc ComparableItem<'disc, Fields>,
+    &'disc Comparable<'disc, Fields>,
 );
 
-/// We use this to represent a Item that can be compared with another Item.
+/// We use this to represent either a `Pattern` or an `Item` that can be compared with eachother.
 ///
-pub struct ComparableItem<'disc, T> {
+/// If we want to compare other things in the future, we extend this struct.
+/// I have marked it as non_exhaustive even though that won't do anything.
+#[non_exhaustive]
+pub struct Comparable<'disc, T> {
     /// To identify the discriminant of the composite type
     pub value: &'disc T,
 
@@ -33,6 +37,9 @@ pub struct ComparableItem<'disc, T> {
     /// The number of arguments in the group.
     arity: usize,
 }
+
+/// This is just an intermediate struct to hide some logic behind.
+pub struct ComparablePatterns<'disc>(Vec<Comparable<'disc, Composite>>);
 
 /// We use this to identify what kind of pair we have matched.
 ///
@@ -113,13 +120,20 @@ impl<'disc> ComparablePair<'disc> {
     }
 }
 
+impl<'disc> ComparablePatterns<'disc> {
+    /// Each compare creates a new Iter where we then compare incoming field with each pattern
+    pub fn compare(&'disc self, comp_item: &'disc Comparable<Fields>) -> Option<ComparablePair> {
+        self.0.iter().find_map(pattern_match(comp_item))
+    }
+}
+
 /// This is a very expensive way of finding a match. We should convert both into ComparableItems before looping over them.
 pub fn pattern_match<'a>(
-    fields: &'a ComparableItem<Fields>,
-) -> impl FnMut(&'a ComparableItem<Composite>) -> Option<ComparablePair<'a>> {
+    fields: &'a Comparable<Fields>,
+) -> impl FnMut(&'a Comparable<Composite>) -> Option<ComparablePair<'a>> {
     // let cmp_item_fields = ComparableItem::from(fields);
     // TODO: Rewrite this when it's possible so that we use comparable items instead.
-    move |shape: &ComparableItem<Composite>| {
+    move |shape: &Comparable<Composite>| {
         let cmp_pair = ComparablePair::from((shape, fields));
 
         match cmp_pair.match_kind() {
@@ -146,18 +160,25 @@ mod boilerplate {
         }
     }
 
-    impl<'a>
-        From<(
-            &'a ComparableItem<'a, Composite>,
-            &'a ComparableItem<'a, Fields>,
-        )> for ComparablePair<'a>
-    {
-        fn from(value: (&'a ComparableItem<Composite>, &'a ComparableItem<Fields>)) -> Self {
+    impl<'disc> From<&'disc PenumExpr> for ComparablePatterns<'disc> {
+        fn from(value: &'disc PenumExpr) -> Self {
+            Self(
+                value
+                    .pattern
+                    .iter()
+                    .map(|pattern| Comparable::from(&pattern.group))
+                    .collect(),
+            )
+        }
+    }
+
+    impl<'a> From<(&'a Comparable<'a, Composite>, &'a Comparable<'a, Fields>)> for ComparablePair<'a> {
+        fn from(value: (&'a Comparable<Composite>, &'a Comparable<Fields>)) -> Self {
             Self(value.0, value.1)
         }
     }
 
-    impl<'disc> From<&'disc Composite> for ComparableItem<'disc, Composite> {
+    impl<'disc> From<&'disc Composite> for Comparable<'disc, Composite> {
         fn from(value: &'disc Composite) -> Self {
             Self {
                 value,
@@ -167,7 +188,7 @@ mod boilerplate {
         }
     }
 
-    impl<'disc> From<&'disc Fields> for ComparableItem<'disc, Fields> {
+    impl<'disc> From<&'disc Fields> for Comparable<'disc, Fields> {
         fn from(value: &'disc Fields) -> Self {
             Self {
                 value,

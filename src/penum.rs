@@ -9,7 +9,7 @@ use syn::token::Comma;
 use syn::Type;
 use syn::{parse_quote, spanned::Spanned, Error};
 
-use crate::factory::pattern_match;
+use crate::factory::ComparablePatterns;
 
 use crate::{
     error::Diagnostic,
@@ -43,8 +43,8 @@ impl Penum<Disassembled> {
         let enum_data = &self.subject.data;
 
         if !enum_data.variants.is_empty() {
-            // Prepare our patterns by converting them into ComparableItems.
-            let comparable_patterns = self.expr.get_comparable_patterns();
+            // Prepare our patterns by converting them into `Comparables`.
+            let comparable_patterns = ComparablePatterns::from(&self.expr);
 
             // Might change this later, but the point is that as we check for equality, we also do impl assertions
             // by extending the `subjects` where clause. This is something that we might want to change in the future
@@ -57,7 +57,7 @@ impl Penum<Disassembled> {
             // For each variant => check if it matches a specified pattern
             for comp_item in self.subject.get_comparable_fields() {
                 // 1. Check if we match in `shape`
-                let Some(matched_pair) = comparable_patterns.iter().find_map(pattern_match(&comp_item)) else {
+                let Some(matched_pair) = comparable_patterns.compare(&comp_item) else {
                     self.error.extend(comp_item.value.span(), no_match_found(comp_item.value, pattern_fmt));
                     continue
                 };
@@ -68,7 +68,7 @@ impl Penum<Disassembled> {
                     continue;
                 }
 
-                // 2. Check if we match in `structure`
+                // 2. Check if we match in `structure`. (We are naively always expecting to never have infixed variadics)
                 for (pat, item) in matched_pair.zip() {
                     // If we cannot desctructure a pattern field, then it must be variadic.
                     let Some(pfield) = pat.get_field() else {

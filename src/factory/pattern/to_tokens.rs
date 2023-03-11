@@ -16,6 +16,7 @@ impl ToTokens for ParameterKind {
             ParameterKind::Regular(f) => f.to_tokens(tokens),
             ParameterKind::Variadic(v) => v.to_tokens(tokens),
             ParameterKind::Range(r) => r.to_tokens(tokens),
+            ParameterKind::Nothing => (),
         }
     }
 }

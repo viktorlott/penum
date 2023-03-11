@@ -7,8 +7,9 @@ use syn::{
 
 use quote::ToTokens;
 
-use super::{ComparableItem, PunctuatedParameters, WhereClause};
+use super::{Comparable, PunctuatedParameters, WhereClause};
 
+mod boilerplate;
 mod parse;
 mod to_tokens;
 
@@ -98,6 +99,9 @@ pub enum ParameterKind {
     /// Variadic(Token![..]) > Range(ExprRange)
     /// ```
     Range(ExprRange),
+
+    /// Suppose to be used for derived Default
+    Nothing,
 }
 
 impl PenumExpr {
@@ -115,10 +119,10 @@ impl PenumExpr {
             .unwrap()
     }
 
-    pub fn get_comparable_patterns(&self) -> Vec<ComparableItem<Composite>> {
+    pub fn get_comparable_patterns(&self) -> Vec<Comparable<Composite>> {
         self.pattern
             .iter()
-            .map(|pattern| ComparableItem::from(&pattern.group))
+            .map(|pattern| Comparable::from(&pattern.group))
             .collect()
     }
 }
@@ -226,50 +230,6 @@ impl Composite {
                     .fold(0, |acc, fk| if f(fk) { acc + 1 } else { acc })
             }
             Composite::Unit => 0,
-        }
-    }
-}
-mod boilerplate {
-    use super::*;
-
-    impl From<&Fields> for Composite {
-        fn from(value: &Fields) -> Self {
-            match value {
-                Fields::Named(FieldsNamed { named, brace_token }) => Composite::Named {
-                    parameters: parse_quote!(#named),
-                    delimiter: *brace_token,
-                },
-                Fields::Unnamed(FieldsUnnamed {
-                    unnamed,
-                    paren_token,
-                }) => Composite::Unnamed {
-                    parameters: parse_quote!(#unnamed),
-                    delimiter: *paren_token,
-                },
-                Fields::Unit => Composite::Unit,
-            }
-        }
-    }
-
-    impl IntoIterator for Composite {
-        type Item = ParameterKind;
-        type IntoIter = IntoIter<ParameterKind>;
-
-        fn into_iter(self) -> Self::IntoIter {
-            match self {
-                Composite::Unit => Punctuated::<ParameterKind, ()>::new().into_iter(),
-                Composite::Named { parameters, .. } => parameters.into_iter(),
-                Composite::Unnamed { parameters, .. } => parameters.into_iter(),
-            }
-        }
-    }
-
-    impl<'a> IntoIterator for &'a Composite {
-        type Item = &'a ParameterKind;
-        type IntoIter = Iter<'a, ParameterKind>;
-
-        fn into_iter(self) -> Self::IntoIter {
-            self.iter()
         }
     }
 }

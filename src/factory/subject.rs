@@ -1,7 +1,7 @@
 use proc_macro2::Ident;
 use syn::{Attribute, DataEnum, Fields, Generics, Visibility};
 
-use super::ComparableItem;
+use super::Comparable;
 
 mod parse;
 mod to_tokens;
@@ -15,10 +15,10 @@ pub struct Subject {
 }
 
 impl Subject {
-    pub fn get_comparable_fields(&self) -> impl Iterator<Item = ComparableItem<Fields>> {
+    pub fn get_comparable_fields(&self) -> impl Iterator<Item = Comparable<Fields>> {
         self.data
             .variants
             .iter()
-            .map(|variant| ComparableItem::from(&variant.fields))
+            .map(|variant| Comparable::from(&variant.fields))
     }
 }
