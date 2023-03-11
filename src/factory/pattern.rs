@@ -1,4 +1,3 @@
-
 use syn::{
     parse_quote,
     punctuated::{IntoIter, Iter, Punctuated},
@@ -6,9 +5,7 @@ use syn::{
     ExprRange, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, Token,
 };
 
-use crate::{
-    utils::{PolymorphicMap},
-};
+use crate::utils::PolymorphicMap;
 
 use super::{PunctuatedParameters, WhereClause};
 
@@ -102,7 +99,6 @@ pub enum ParameterKind {
     /// ```
     Range(ExprRange),
 }
-
 
 pub fn insert_polymap(types: &mut PolymorphicMap, pty: String, ity: String) {
     if let Some(set) = types.get_mut(pty.as_str()) {

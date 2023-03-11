@@ -37,13 +37,13 @@ pub struct ComparableItem<'disc, T> {
 /// NOTE: Could probably have used discriminants instead..
 enum MatchKind {
     /// Mathed either a `Named` or an `Unnamed` pair.
-    /// 
+    ///
     /// Compound matches implies that we have inner structure to continue comparing
     Compound,
 
     /// Matched a unit pair
-    /// 
-    /// Nullary matches implies that we satisfy the pattern shape, 
+    ///
+    /// Nullary matches implies that we satisfy the pattern shape,
     /// and that we don't need to compare inner structure
     Nullary,
 
@@ -94,7 +94,9 @@ impl<'disc> ComparablePair<'disc> {
 }
 
 /// This is a very expensive way of finding a match. We should convert both into ComparableItems before looping over them.
-pub fn pattern_match<'a>(fields: &'a ComparableItem<Fields>) -> impl FnMut(&'a ComparableItem<Composite>) -> Option<ComparablePair<'a>> {
+pub fn pattern_match<'a>(
+    fields: &'a ComparableItem<Fields>,
+) -> impl FnMut(&'a ComparableItem<Composite>) -> Option<ComparablePair<'a>> {
     // let cmp_item_fields = ComparableItem::from(fields);
     // TODO: Rewrite this when it's possible so that we use comparable items instead.
     move |shape: &ComparableItem<Composite>| {
@@ -102,7 +104,6 @@ pub fn pattern_match<'a>(fields: &'a ComparableItem<Fields>) -> impl FnMut(&'a C
 
         match cmp_pair.match_kind() {
             MatchKind::Compound => {
-
                 if cmp_pair.has_variadic_last() {
                     cmp_pair
                         .check_minimum_arity_satisfaction()
@@ -125,7 +126,12 @@ mod boilerplate {
         }
     }
 
-    impl<'a> From<(&'a ComparableItem<'a, Composite>, &'a ComparableItem<'a, Fields>)> for ComparablePair<'a> {
+    impl<'a>
+        From<(
+            &'a ComparableItem<'a, Composite>,
+            &'a ComparableItem<'a, Fields>,
+        )> for ComparablePair<'a>
+    {
         fn from(value: (&'a ComparableItem<Composite>, &'a ComparableItem<Fields>)) -> Self {
             Self(value.0, value.1)
         }

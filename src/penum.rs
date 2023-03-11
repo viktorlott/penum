@@ -4,14 +4,14 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::format_ident;
 use quote::ToTokens;
-use syn::Type;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
+use syn::Type;
 use syn::{parse_quote, spanned::Spanned, Error};
 
-use crate::factory::ComparableItem;
 use crate::factory::insert_polymap;
 use crate::factory::pattern_match;
+use crate::factory::ComparableItem;
 use crate::{
     error::Diagnostic,
     factory::{PenumExpr, Subject, WherePredicate},
@@ -49,9 +49,26 @@ impl Penum<Disassembled> {
                 "Expected to find at least one variant.",
             );
         } else {
-            let comparable_patterns = self.expr.pattern.iter().map(|pattern| ComparableItem::from(&pattern.group)).collect::<Vec<_>>();
+            let comparable_patterns = self
+                .expr
+                .pattern
+                .iter()
+                .map(|pattern| ComparableItem::from(&pattern.group))
+                .collect::<Vec<_>>();
             let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
-            let pat = &self.expr.pattern;
+            let pattern_fmt = &self
+                .expr
+                .pattern
+                .iter()
+                .map(|s| s.to_token_stream().to_string())
+                .reduce(|acc, s| {
+                    if acc.is_empty() {
+                        s
+                    } else {
+                        format!("{acc} | {s}")
+                    }
+                })
+                .unwrap();
             self.subject.data.variants.iter().map(|variant_item| ComparableItem::from(&variant_item.fields)).for_each(|comp_item| {
                 let Some((group, ifields)) = comparable_patterns.iter().find_map(pattern_match(&comp_item)).map(Into::into) else {
                     return self.error.extend(
@@ -59,16 +76,7 @@ impl Penum<Disassembled> {
                         format!(
                             "`{}` doesn't match pattern `{}`",
                             comp_item.value.to_token_stream(),
-                            pat.iter()
-                            .map(|s| s.to_token_stream().to_string())
-                            .reduce(|acc, s| {
-                                if acc.is_empty() {
-                                    s
-                                } else {
-                                    format!("{acc} | {s}")
-                                }
-                            })
-                            .unwrap()
+                            pattern_fmt
                         ),
                     );
                     
