@@ -6,6 +6,7 @@ use syn::parse_macro_input;
 use factory::{PenumExpr, Subject};
 use penum::Penum;
 
+mod dispatch;
 mod error;
 mod factory;
 mod penum;

@@ -131,7 +131,8 @@ impl Parse for TraitBound {
             // TODO: We should also check if the trait that comes after exists in our "allow" list.
             //       The allow list should for now contain core traits.
             //       We do all this just to support `^` (dispatch) symbol.
-            (name_trait == "_TesterTrait").then_some(token)
+            println!("Dispatchable IDENT: {}", name_trait);
+            (name_trait == "AsRef").then_some(token)
         } else {
             None
         };

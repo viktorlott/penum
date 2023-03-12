@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 extern crate penum;
 use penum::penum;
-use std::convert::AsRef;
+use std::ops::Add;
 
-#[penum( (T) where T: ^AsRef<str> )]
+#[penum((T) where T: ^Copy + ^Add<i32> + Sized)]
 enum Foo {
-    Bar(String),
+    Bar(i32),
 }
 
 fn main() {}

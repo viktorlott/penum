@@ -34,10 +34,20 @@ pub enum TypeParamBound {
     Lifetime(Lifetime),
 }
 
+#[derive(Clone)]
 pub struct TraitBound {
     pub paren_token: Option<token::Paren>,
     pub dispatch: Option<Token![^]>,
     pub modifier: TraitBoundModifier,
     pub lifetimes: Option<BoundLifetimes>,
     pub path: Path,
+}
+
+impl TypeParamBound {
+    pub fn get_dispatchable_trait_bound(&self) -> Option<TraitBound> {
+        match self {
+            TypeParamBound::Trait(tb) => tb.dispatch.map(|_| tb.clone()),
+            _ => None,
+        }
+    }
 }
