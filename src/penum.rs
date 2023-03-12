@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
+
 use std::marker::PhantomData;
 
 use proc_macro::TokenStream;
@@ -11,10 +11,14 @@ use quote::ToTokens;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
 use syn::Fields;
+use syn::ImplItem;
+use syn::ItemImpl;
+use syn::Signature;
+use syn::TraitItemMethod;
 use syn::Type;
 use syn::{parse_quote, spanned::Spanned, Error};
 
-use crate::dispatch::Dispatchalor;
+use crate::dispatch::construct;
 use crate::factory::ComparablePats;
 
 use crate::{
@@ -54,9 +58,10 @@ impl Penum<Disassembled> {
     ///
     pub fn assemble(mut self) -> Penum<Assembled> {
         let variants = &self.subject.get_variants();
+        let name = &self.subject.ident;
 
         if !variants.is_empty() {
-            let mut something: BTreeMap<Ident, Fields> = Default::default();
+            let _something: BTreeMap<Ident, Fields> = Default::default();
 
             // Might change this later, but the point is that as we check for equality, we also do impl assertions
             // by extending the `subjects` where clause. This is something that we might want to change in the future
@@ -79,7 +84,7 @@ impl Penum<Disassembled> {
             // 1. Validate its shape by comparing discriminant and unit/tuple/struct arity. (OUTER)
             //    - Failure: add a "no_match_found" error and continue to next variant.
             // 2. Validate each parameter    ...continue...                                 (INNER)
-            for (_ident, comp_item) in self.subject.get_comparable_fields() {
+            for (variant_ident, comp_item) in self.subject.get_comparable_fields() {
                 // 1. Check if we match in `shape`
                 let Some(matched_pair) = comparable_patterns.compare(&comp_item) else {
                     self.error.extend(comp_item.value.span(), no_match_found(comp_item.value, &pattern_fmt));
@@ -141,10 +146,79 @@ impl Penum<Disassembled> {
                                     //
                                     if let Some(disp_map) = dispach_members.get(&pat_ty) {
                                         disp_map.iter().for_each(|tb| {
+                                            let asref = construct();
+
+                                            let path = &tb.path;
+
+                                            let imp: ItemImpl = parse_quote!(
+                                                impl #path for #name {
+                                                    fn hello() -> bool;
+                                                }
+                                            );
+                                            // TODO: THIS IS UNDER DEVELOPMENT. Support core and std trait first.
+                                            asref.items.iter().for_each(|x| {
+                                                match x {
+                                                    syn::TraitItem::Type(_) => todo!(),
+                                                    syn::TraitItem::Method(TraitItemMethod {
+                                                        attrs,
+                                                        sig,
+                                                        semi_token,
+                                                        ..
+                                                    }) => {
+                                                        let Signature {
+                                                            constness,
+                                                            asyncness,
+                                                            unsafety,
+                                                            abi,
+                                                            fn_token,
+                                                            ident,
+                                                            generics,
+                                                            paren_token,
+                                                            inputs,
+                                                            variadic,
+                                                            output,
+                                                        } = sig;
+                                                        let mefields = comp_item.value.borrow();
+
+
+                                                        // For variants that cannot be dispatched:
+                                                        // - If it's a owned return type:
+                                                        //    1. Look for fn args that can act as default? 
+                                                        //    2. If it implements default -> return default.
+                                                        // - If it's a referenced return type:
+                                                        //    1. Look for fn args that can act as default? 
+                                                        //    2. &T has default, use a static lazycell (to support non-const [non-primitive / non-copy] types)?
+                                                        // - Last resort -> panic
+
+                                                        let tr_name = &asref.ident;
+                                                        // We could call it with the receiver type
+                                                        // - AsRef::as_ref(&self #(,#args)*) 
+                                                        // - `#tr_name::#fn_name (&self #(,#args)*);`
+                                                        let impItem: ImplItem = parse_quote!(
+                                                            #fn_token #ident #generics () #output {
+                                                                match self {
+                                                                    #name::#variant_ident #mefields => x.#ident (),
+                                                                    _ => panic("IDK")
+                                                                }
+                                                            }
+                                                        );
+
+                                                        println!("\n\n What {} \n\n", impItem.get_string());
+                                                    }
+                                                    _ => todo!(),
+                                                    // I don't want to handle these for now.
+                                                    // syn::TraitItem::Const(_) => todo!(),
+                                                    // syn::TraitItem::Macro(_) => todo!(),
+                                                    // syn::TraitItem::Verbatim(_) => todo!(),
+                                                }
+                                            });
+
                                             println!(
-                                                "DISPACHER -> {}: FULL {}",
+                                                "DISPACHER -> {}: FULL {} \n {} \n {}",
                                                 tb.path.get_ident().get_string(),
-                                                tb.path.get_string()
+                                                tb.path.get_string(),
+                                                asref.get_string(),
+                                                imp.get_string()
                                             );
                                         })
                                     }
