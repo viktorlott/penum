@@ -52,10 +52,8 @@ impl Penum<Disassembled> {
         }
     }
 
-    ///
-    ///
+
     /// Might be using these interchangeably [field / parameter / argument]
-    ///
     pub fn assemble(mut self) -> Penum<Assembled> {
         let variants = &self.subject.get_variants();
         let name = &self.subject.ident;
@@ -85,7 +83,31 @@ impl Penum<Disassembled> {
             //    - Failure: add a "no_match_found" error and continue to next variant.
             // 2. Validate each parameter    ...continue...                                 (INNER)
             for (variant_ident, comp_item) in self.subject.get_comparable_fields() {
-                // 1. Check if we match in `shape`
+                // FIXME: Note, this only affects concrete types.. .compare(..) should return a list of 
+                //        matches instead of just the first match it finds.
+                //
+                //        Currently, we can end up returning a pattern that matches in shape, but not in structure, even though another 
+                //        pattern could satisfy our variant. I guess one could think of it as a "catch all" . 
+                //
+                //        e.g. (i32, ..) | (..) => V1(String, i32), V2(String, String)
+                //                                    ^^^^^^           ^^^^^^
+                //                               `Found 'String' but expected 'i32'`
+                //
+                //        Because the first pattern fragment contains a concrete type, it should be possible mark the 
+                //        error as temporary and then check for other pattern matches. Note, the first error should always 
+                //        be the default one.
+                //
+                //        Given our pattern above, `(..)` should be a fallback pattern.
+                //
+                //        Should we allow concrete types with trait bound at argument position?
+                //        e.g.
+                //          (i32: Trait,  ..) | (..)
+                //          (i32: ^Trait, ..) | (..)
+                //
+                //        For future reference! This should help with dispach inference.
+
+
+                // 1. Check if we match in `shape` 
                 let Some(matched_pair) = comparable_patterns.compare(&comp_item) else {
                     self.error.extend(comp_item.value.span(), no_match_found(comp_item.value, &pattern_fmt));
                     continue
@@ -111,6 +133,11 @@ impl Penum<Disassembled> {
                     match pat_field.ty {
                         // Check for impl expressions, `(impl Trait, T)`.
                         Type::ImplTrait(ref ty_impl_trait) => {
+                            // TODO: SUPPORT DISPATCHING FROM `impl Trait` expressions. e.g (impl ^Trait) | (_, _) 
+                            // 
+                            // Should we infer dispatching also? 
+
+
                             // We use a `dummy` identifier to store our bound under.
                             let tty = ident_impl(ty_impl_trait);
                             let bounds = &ty_impl_trait.bounds;
@@ -121,7 +148,7 @@ impl Penum<Disassembled> {
                             // If it exists, insert new concrete type.
                             self.types.polymap_insert(tty.to_string(), item_ty)
                         }
-                        // ADD MORE HANDLES HERE LIKE NESTED TUPLES
+                        // ADD MORE HANDLES HERE LIKE NESTED TUPLE PATTERNS?
                         _ => {
                             let pat_ty = pat_field.ty.get_string();
                             // Check if it's a generic or concrete type
@@ -143,7 +170,7 @@ impl Penum<Disassembled> {
                                     // `where T: ^Trait + ^Mate, T: ^Fate, T: ^Mate` turns into `T => [^Trait, ^Mate, ^Fate]`
 
                                     // I had to use a vec instead because of partial ordering not being implemented for TraitBound
-                                    //
+                                    // 
                                     if let Some(disp_map) = dispach_members.get(&pat_ty) {
                                         disp_map.iter().for_each(|tb| {
                                             let asref = construct();
@@ -206,7 +233,7 @@ impl Penum<Disassembled> {
                                                         println!("\n\n What {} \n\n", impItem.get_string());
                                                     }
                                                     _ => todo!(),
-                                                    // I don't want to handle these for now.
+                                                    // I don't want to handle these right now.
                                                     // syn::TraitItem::Const(_) => todo!(),
                                                     // syn::TraitItem::Macro(_) => todo!(),
                                                     // syn::TraitItem::Verbatim(_) => todo!(),

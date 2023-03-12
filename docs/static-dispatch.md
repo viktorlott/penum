@@ -85,8 +85,8 @@ impl Trait for Eva {}
         U: Trait
 )]
 enum dispatched {
-    V1(Eva, Adam),
-    V2(Adam, Adam),
+   V1(Eva, Adam),
+   V2(Adam, Adam),
 }
 ```
 
@@ -114,3 +114,43 @@ and then it would be difficult to know which one should be dispatched..
    #[penum( (T) | (T,  U) where  T: ^Trait + Tiart, U: Trait )]
    ```
    Another thing is that for something to be dispachable, all variants must include the generic with the marked trait?
+
+   It should also be possible to use `impl ^Trait` to become a dispatchable candidate.
+   Knowing that this syntax makes it a little confusing towards unmatched variants. e.g.
+
+
+### Dispatch semantics
+
+```rust
+struct Random;
+
+#[penum( 
+   // # Given this impl trait type and the variants:
+   //   - Sadly, because of the "dum" polymorphic builder, V2's first argument `Random` will be expected to implement AsRef.
+   //     But we already know that it does not, if we had core/std trait knowledge.
+   //     - i.e it would be possible to infer that V2s second argument could be a valid dispatcher because of V1s first argument.
+   //       But this might lead to some sort of unsoundness given that the order and position should matter.
+   //       How it should be implemented then is by a where clause.
+   // 
+   //       e.g. (..) where String: ^AsRef<str>
+   //       
+   //       This is so much cleaner. 
+   (impl ^AsRef<str>, ..) | (..)
+)]
+enum dispatched {
+   // First argument matches our impl trait bound, and because it's prefixed with `^`, we give mark variant with a dispatch arm.
+   V1(String, Random),
+
+   // Now, because 
+   V2(Random, String),
+
+   V3(Random, String, String),
+}
+```
+
+
+
+<!-- 
+ ```rust
+   #[penum( (T) | (T,  U) where  T: ^Trait + Tiart, U: Trait )]
+   ``` -->
