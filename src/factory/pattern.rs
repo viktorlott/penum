@@ -1,9 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use syn::{
     punctuated::{Iter, Punctuated},
     token::{self},
-    ExprRange, Field, Ident, Token, Type,
+    ExprRange, Field, Ident, Token,
 };
 
 use quote::ToTokens;

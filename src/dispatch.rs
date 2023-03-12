@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use proc_macro2::Ident;
 use syn::{Fields, ItemTrait};
 
-use crate::factory::TraitBound;
-
 mod as_ref;
+
+pub use as_ref::construct;
 
 #[derive(Default)]
 pub struct DispatchMap(pub BTreeMap<Dispatchable, BTreeSet<Dispatchalor>>);
