@@ -39,7 +39,7 @@ pub struct Comparable<'disc, T> {
 }
 
 /// This is just an intermediate struct to hide some logic behind.
-pub struct ComparablePatterns<'disc>(Vec<Comparable<'disc, Composite>>);
+pub struct ComparablePats<'disc>(Vec<Comparable<'disc, Composite>>);
 
 /// We use this to identify what kind of pair we have matched.
 ///
@@ -120,7 +120,7 @@ impl<'disc> ComparablePair<'disc> {
     }
 }
 
-impl<'disc> ComparablePatterns<'disc> {
+impl<'disc> ComparablePats<'disc> {
     /// Each compare creates a new Iter where we then compare incoming field with each pattern
     pub fn compare(&'disc self, comp_item: &'disc Comparable<Fields>) -> Option<ComparablePair> {
         self.0.iter().find_map(pattern_match(comp_item))
@@ -152,13 +152,14 @@ pub fn pattern_match<'a>(
 
 mod boilerplate {
     use super::*;
+
     impl<'disc> From<ComparablePair<'disc>> for (&'disc Composite, &'disc Fields) {
         fn from(val: ComparablePair<'disc>) -> Self {
             (val.0.value, val.1.value)
         }
     }
 
-    impl<'disc> From<&'disc PenumExpr> for ComparablePatterns<'disc> {
+    impl<'disc> From<&'disc PenumExpr> for ComparablePats<'disc> {
         fn from(value: &'disc PenumExpr) -> Self {
             Self(
                 value
