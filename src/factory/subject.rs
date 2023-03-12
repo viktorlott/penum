@@ -1,10 +1,15 @@
 use proc_macro2::Ident;
-use syn::{Attribute, DataEnum, Fields, Generics, Visibility};
+use syn::{
+    punctuated::Punctuated, token::Comma, Attribute, DataEnum, Fields, Generics, Variant,
+    Visibility,
+};
 
 use super::Comparable;
 
 mod parse;
 mod to_tokens;
+
+pub type Variants = Punctuated<Variant, Comma>;
 
 pub struct Subject {
     pub attrs: Vec<Attribute>,
@@ -15,10 +20,14 @@ pub struct Subject {
 }
 
 impl Subject {
-    pub fn get_comparable_fields(&self) -> impl Iterator<Item = Comparable<Fields>> {
-        self.data
-            .variants
+    /// Should maybe remove this..
+    pub fn get_variants(&self) -> &Variants {
+        &self.data.variants
+    }
+
+    pub fn get_comparable_fields(&self) -> impl Iterator<Item = (&Ident, Comparable<Fields>)> {
+        self.get_variants()
             .iter()
-            .map(|variant| Comparable::from(&variant.fields))
+            .map(|variant| (&variant.ident, Comparable::from(&variant.fields)))
     }
 }

@@ -1,17 +1,24 @@
+use std::borrow::Borrow;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use proc_macro::TokenStream;
+use proc_macro2::Ident;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::format_ident;
 use quote::ToTokens;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
+use syn::Fields;
 use syn::Type;
 use syn::{parse_quote, spanned::Spanned, Error};
 
-use crate::factory::ComparablePatterns;
+use crate::dispatch::Dispatchalor;
+use crate::factory::ComparablePats;
 
 use crate::{
+    dispatch::DispatchMap,
     error::Diagnostic,
     factory::{PenumExpr, Subject, WherePredicate},
     utils::{ident_impl, no_match_found, string, PolymorphicMap},
@@ -25,6 +32,7 @@ pub struct Penum<State = Disassembled> {
     pub subject: Subject,
     pub error: Diagnostic,
     pub types: PolymorphicMap,
+    pub dispatch: DispatchMap,
     _marker: PhantomData<State>,
 }
 
@@ -35,27 +43,43 @@ impl Penum<Disassembled> {
             subject,
             error: Default::default(),
             types: Default::default(),
+            dispatch: Default::default(),
             _marker: Default::default(),
         }
     }
 
+    ///
+    ///
+    /// Might be using these interchangeably [field / parameter / argument]
+    ///
     pub fn assemble(mut self) -> Penum<Assembled> {
-        let enum_data = &self.subject.data;
+        let variants = &self.subject.get_variants();
 
-        if !enum_data.variants.is_empty() {
-            // Prepare our patterns by converting them into `Comparables`.
-            let comparable_patterns = ComparablePatterns::from(&self.expr);
+        if !variants.is_empty() {
+            let mut something: BTreeMap<Ident, Fields> = Default::default();
 
             // Might change this later, but the point is that as we check for equality, we also do impl assertions
             // by extending the `subjects` where clause. This is something that we might want to change in the future
             // and instead use `spanned_quote` or some other bound assertion.
             let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
 
-            // Expecting failure, hence pre-calling
+            // Prepare our patterns by converting them into `Comparables`. This is just a wrapper type that contains
+            // commonly used props.
+            let comparable_patterns: ComparablePats = self.expr.borrow().into();
+
+            // We pre-check for clause because we might be needing this during the dispatch step.
+            // Should add `has_dispatchable_member` maybe? let has_clause = self.expr.has_clause();
+            // Turn into iterator instead?
+            let dispatchables = self.expr.get_dispatchable_members();
+
+            // Expecting failure like `variant doesn't match shape`, hence pre-calling.
             let pattern_fmt = self.expr.pattern_to_string();
 
-            // For each variant => check if it matches a specified pattern
-            for comp_item in self.subject.get_comparable_fields() {
+            // For each variant:
+            // 1. Validate its shape by comparing discriminant and unit/tuple/struct arity. (OUTER)
+            //    - Failure: add a "no_match_found" error and continue to next variant.
+            // 2. Validate each parameter    ...continue...                                 (INNER)
+            for (_ident, comp_item) in self.subject.get_comparable_fields() {
                 // 1. Check if we match in `shape`
                 let Some(matched_pair) = comparable_patterns.compare(&comp_item) else {
                     self.error.extend(comp_item.value.span(), no_match_found(comp_item.value, &pattern_fmt));
@@ -68,59 +92,107 @@ impl Penum<Disassembled> {
                     continue;
                 }
 
-                // 2. Check if we match in `structure`. (We are naively always expecting to never have infixed variadics)
-                for (pat_param, item_field) in matched_pair.zip() {
+                // 2. Check if we match in `structure`.
+                // (We are naively always expecting to never have infixed variadics)
+                for (_index_param, (pat_parameter, item_field)) in matched_pair.zip().enumerate() {
                     // If we cannot desctructure a pattern field, then it must be variadic.
                     // This might change later
-                    let Some(pat_field) = pat_param.get_field() else {
+                    let Some(pat_field) = pat_parameter.get_field() else {
                         break;
                     };
 
-                    let item_ty = string(&item_field.ty);
+                    let item_ty = item_field.ty.get_string();
 
-                    // Check for impl expressions, `(impl Trait, T)`.
-                    if let Type::ImplTrait(imptr) = &pat_field.ty {
-                        // We use a `dummy` identifier to store our bound under.
-                        let tty = ident_impl(imptr);
-                        let bounds = &imptr.bounds;
+                    match pat_field.ty {
+                        // Check for impl expressions, `(impl Trait, T)`.
+                        Type::ImplTrait(ref ty_impl_trait) => {
+                            // We use a `dummy` identifier to store our bound under.
+                            let tty = ident_impl(ty_impl_trait);
+                            let bounds = &ty_impl_trait.bounds;
 
-                        predicates.push(parse_quote!(#tty: #bounds));
+                            predicates.push(parse_quote!(#tty: #bounds));
 
-                        // First we check if pty (T) exists in polymorphicmap.
-                        // If it exists, insert new concrete type.
-                        self.types.polymap_insert(tty.to_string(), item_ty)
-                    } else {
-                        // Check if we are generic or concrete type.
-                        let pat_ty = string(&pat_field.ty);
-                        let is_generic = pat_ty.eq("_") || pat_ty.to_uppercase().eq(&pat_ty);
-
-                        // If pattern type is concrete, make sure it matches item type
-                        if !is_generic && pat_ty != item_ty {
-                            self.error.extend(
-                                item_field.ty.span(),
-                                format!("Found {item_ty} but expected {pat_ty}."),
-                            );
-                            continue;
-                        } else {
                             // First we check if pty (T) exists in polymorphicmap.
                             // If it exists, insert new concrete type.
-                            self.types.polymap_insert(pat_ty, item_ty);
+                            self.types.polymap_insert(tty.to_string(), item_ty)
+                        }
+                        // ADD MORE HANDLES HERE LIKE NESTED TUPLES
+                        _ => {
+                            let pat_ty = pat_field.ty.get_string();
+                            // Check if it's a generic or concrete type
+                            // - We only accept `_|[A-Z][A-Z0-9]*` as generics.
+                            let is_generic =
+                                pat_field.ty.is_placeholder() || pat_ty.to_uppercase().eq(&pat_ty);
+
+                            if is_generic {
+                                // First we check if pty (T) exists in polymorphicmap.
+                                // If it exists, insert new concrete type.
+                                self.types.polymap_insert(pat_ty.clone(), item_ty);
+
+                                // 3. Dispachable list
+                                if let Some(ref dispach_members) = dispatchables {
+                                    // FIXME: We are only expecting one dispatch per generic now, so CHANGE THIS WHEN POSSIBLE:
+                                    //        - `where T: ^Trait, T: ^Mate` -> only `^Trait` will be found. :(
+                                    //        - `where T: ^Trait + ^Mate`   -> should be just turn this into a poly map instead?
+                                    //
+                                    // `where T: ^Trait + ^Mate, T: ^Fate, T: ^Mate` turns into `T => [^Trait, ^Mate, ^Fate]`
+
+                                    // I had to use a vec instead because of partial ordering not being implemented for TraitBound
+                                    //
+                                    if let Some(disp_map) = dispach_members.get(&pat_ty) {
+                                        disp_map.iter().for_each(|tb| {
+                                            println!(
+                                                "DISPACHER -> {}: FULL {}",
+                                                tb.path.get_ident().get_string(),
+                                                tb.path.get_string()
+                                            );
+                                        })
+                                    }
+                                }
+                            } else if item_ty.ne(&pat_ty) {
+                                self.error.extend(
+                                    item_field.ty.span(),
+                                    format!("Found {item_ty} but expected {pat_ty}."),
+                                );
+                            }
                         }
                     }
                 }
             }
 
-            // The validate and collect also works for adding `impl Trait` bounds to the pattern where clause.
-            let pat_pred = self.expr.clause.get_or_insert_with(|| parse_quote!(where));
+            // Extend our expr where clause with `impl Trait` bounds if found. (predicates)
+            let penum_expr_clause = self.expr.clause.get_or_insert_with(|| parse_quote!(where));
 
             predicates
                 .iter()
-                .for_each(|pred| pat_pred.predicates.push(parse_quote!(#pred)))
+                .for_each(|pred| penum_expr_clause.predicates.push(parse_quote!(#pred)));
+
+            // Might be a little unnecessary to loop through our predicates again.. But we can refactor later.
+            // penum_expr_clause.predicates.iter().filter_map(f)
+
+            // if let WherePredicate::Type(pred_ty) = pred {
+            //     pred_ty.bounds.iter().filter_map(|p| {
+            //         match p {
+            //             TypeParamBound::Trait(tr) if tr.dispatch.is_some() => Some(tr),
+            //             _ => None
+            //         }
+            //     }).for_each(|tr_bound| {
+
+            //         println!("Dispatch {} for {}", tr_bound.to_token_stream(), self.subject.ident);
+            //     });
+            // }
+
+            // if let Some(match_pat) = self.expr.find_predicate(|pred| {
+            //     // pred.bounded_ty
+            //     // Find match where pred is dispatchable and is identical to pat_ty
+            //     todo!()
+            // }) {
+            //     // match_pat.
+            //     todo!()
+            // }
         } else {
-            self.error.extend(
-                enum_data.variants.span(),
-                "Expected to find at least one variant.",
-            );
+            self.error
+                .extend(variants.span(), "Expected to find at least one variant.");
         }
 
         // SAFETY: Transmuting Self into Self with a different ZST is safe.
@@ -153,6 +225,8 @@ impl Penum<Assembled> {
 
     fn link_bounds(self: &mut Penum<Assembled>) -> Vec<TokenStream2> {
         let mut bound_tokens = Vec::new();
+
+        // println!("{}", pred.to_token_stream());
         if let Some(where_cl) = self.expr.clause.as_ref() {
             where_cl
                 .predicates
@@ -174,5 +248,33 @@ impl Penum<Assembled> {
                 })
         }
         bound_tokens
+    }
+}
+
+pub trait Stringify: ToTokens {
+    fn get_string(&self) -> String {
+        self.to_token_stream().to_string()
+    }
+}
+
+pub trait TypeUtils {
+    fn is_placeholder(&self) -> bool;
+    fn some_generic(&self) -> Option<String>;
+}
+
+impl<T> Stringify for T where T: ToTokens {}
+
+impl TypeUtils for Type {
+    fn is_placeholder(&self) -> bool {
+        matches!(self, Type::Infer(_))
+    }
+
+    fn some_generic(&self) -> Option<String> {
+        self.is_placeholder()
+            .then(|| {
+                let pat_ty = self.get_string();
+                pat_ty.to_uppercase().eq(&pat_ty).then_some(pat_ty)
+            })
+            .flatten()
     }
 }

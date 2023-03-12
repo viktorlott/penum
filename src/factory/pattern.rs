@@ -1,12 +1,18 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use syn::{
     punctuated::{Iter, Punctuated},
     token::{self},
-    ExprRange, Field, Ident, Token,
+    ExprRange, Field, Ident, Token, Type,
 };
 
 use quote::ToTokens;
 
-use super::{Comparable, PunctuatedParameters, WhereClause};
+use crate::penum::Stringify;
+
+use super::{
+    Comparable, PredicateType, PunctuatedParameters, TraitBound, WhereClause, WherePredicate,
+};
 
 mod boilerplate;
 mod parse;
@@ -123,6 +129,67 @@ impl PenumExpr {
             .iter()
             .map(|pattern| Comparable::from(&pattern.group))
             .collect()
+    }
+
+    pub fn has_predicates(&self) -> bool {
+        matches!(&self.clause, Some(wc) if !wc.predicates.is_empty())
+    }
+
+    pub fn has_clause(&self) -> bool {
+        self.clause.is_some()
+    }
+
+    /// This should probably be refactored...
+    pub fn get_dispatchable_members(&self) -> Option<BTreeMap<String, Vec<TraitBound>>> {
+        if self.has_predicates() {
+            let mut polymap: BTreeMap<String, Vec<TraitBound>> = Default::default();
+            // SAFETY: We can only have predicates if we have a where clause.
+            unsafe { self.clause.as_ref().unwrap_unchecked() }
+                .predicates
+                .iter()
+                .for_each(|pred| {
+                    if let WherePredicate::Type(pred_ty) = pred {
+                        let mut bounds: Vec<TraitBound> = pred_ty
+                            .bounds
+                            .iter()
+                            .filter_map(|b| b.get_dispatchable_trait_bound())
+                            .collect();
+
+                        if bounds.is_empty() {
+                            return;
+                        }
+
+                        let ty = pred_ty.bounded_ty.get_string();
+
+                        if let Some(entry) = polymap.get_mut(&ty) {
+                            entry.append(&mut bounds)
+                        } else {
+                            polymap.insert(ty, bounds);
+                        }
+                    }
+                });
+            (!polymap.is_empty()).then_some(polymap)
+        } else {
+            None
+        }
+    }
+
+    pub fn find_predicate(
+        &self,
+        f: impl Fn(&PredicateType) -> Option<&PredicateType>,
+    ) -> Option<&PredicateType> {
+        if self.has_predicates() {
+            // SAFETY: We can only have predicates if we have a where clause.
+            unsafe { self.clause.as_ref().unwrap_unchecked() }
+                .predicates
+                .iter()
+                .find_map(|pred| match pred {
+                    WherePredicate::Type(pred_ty) => f(pred_ty),
+                    _ => None,
+                })
+        } else {
+            None
+        }
     }
 }
 
