@@ -9,7 +9,7 @@ use syn::{parse_quote, Fields, ItemTrait};
 #[derive(Default)]
 pub struct DispatchMap(pub BTreeMap<Dispatchable<ItemTrait>, BTreeSet<Dispatchalor>>);
 
-pub struct Dispatchable<T>(T);
+pub struct Dispatchable<T>(pub T);
 
 /// For each <Dispatchable> -> <{ position, ident, fields }>
 /// Used for dispatching
@@ -240,6 +240,7 @@ impl FromStr for Std {
             "SliceIndex" => Self::SliceIndex,
             "FromStr" => Self::FromStr,
             "ToString" => Self::ToString,
+            _ => panic!("no match found, {}", value)
         })
     }
 }
