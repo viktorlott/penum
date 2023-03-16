@@ -1,8 +1,8 @@
 use ::rustfmt::{format_input, Input};
 use regex::Regex;
 use scraper::{Html, Selector};
-use std::fs::{read_to_string, File};
-use std::io::{Sink};
+use std::fs::{read_to_string, File, write};
+use std::io::{Sink, Write};
 use std::process::Command;
 
 pub fn format_code(orig: String) -> String {
@@ -86,6 +86,7 @@ fn create_traits_from(base: &str) {
                 .iter()
                 .filter_map(|path| {
                     let tr_code = get_trait_code(path.trim()).replace(|c: char| !c.is_ascii(), "");
+
                     if tr_code.contains("{ ... }") || tr_code.contains("auto trait") {
                         None
                     } else {
@@ -107,10 +108,10 @@ fn create_traits_from(base: &str) {
                 .as_str();
 
             names.push(trait_ident.to_string());
-            traits.push(fmtd_code);
+            traits.push(fmtd_code.clone());
 
-            // let file = File::create(format!("./src/{}/{}.rs", base, trait_ident));
-            // file.unwrap().write_all(&fmtd_code.into_bytes()).expect("write file");
+            let file = File::create(format!("../src/dispatch/{}/{}.rs", base, trait_ident));
+            file.unwrap().write_all(&fmtd_code.into_bytes()).expect("write file");
         });
 
 
@@ -128,14 +129,21 @@ fn create_traits_from(base: &str) {
     let impl_from_enum = format_code(format!(
         "impl From<Core> for Dispatcher<ItemTrait> {{ fn from(value: Core) -> Self {{ match value {{  {}  }} }} }}",
         names.iter()
-            .map(|n| { format!("Self::{} => parse_quote!(include!(\"./core/{}.rs\"))", n, n) })
+            .map(|n| { format!("Self::{} => parse_quote!(include!(\"./std/{}.rs\"))", n, n) })
             .collect::<Vec<_>>()
             .join(",")
     ));
 
-    println!("{}", impl_from_enum);
+    let file = File::create("../src/dispatch/std.rs");
+    let file2 = File::create("../src/dispatch/transform.rs");
+    let file3 = File::create("../src/dispatch/enum.rs");
+
+    file.unwrap().write_all(&impl_from_enum.into_bytes()).expect("write file");
+    file2.unwrap().write_all(&impl_from_str.into_bytes()).expect("write file");
+    file3.unwrap().write_all(&core_enum.into_bytes()).expect("write file");
+
 }
 
 fn main() {
-    create_traits_from("core");
+    create_traits_from("std");
 }
