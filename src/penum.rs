@@ -18,7 +18,6 @@ use syn::TraitItemMethod;
 use syn::Type;
 use syn::{parse_quote, spanned::Spanned, Error};
 
-use crate::dispatch::construct;
 use crate::factory::ComparablePats;
 
 use crate::{
