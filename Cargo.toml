@@ -1,3 +1,7 @@
+
+[workspace]
+members = ["traits"]
+
 [package]
 name = "penum"
 version = "0.1.12"

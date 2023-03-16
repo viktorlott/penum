@@ -1,0 +1,13 @@
+[package]
+name = "traits"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+regex = "1.7.1"
+rustfmt = "0.10.0"
+scraper = "0.15.0"
+sxd-document = "0.3.2"
+sxd-xpath = "0.4.2"

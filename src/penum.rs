@@ -31,6 +31,9 @@ use crate::{
 pub struct Disassembled;
 pub struct Assembled;
 
+/// Top level container type for Penum.
+/// 
+/// It contains everything we need
 pub struct Penum<State = Disassembled> {
     pub expr: PenumExpr,
     pub subject: Subject,
@@ -53,7 +56,7 @@ impl Penum<Disassembled> {
     }
 
 
-    /// Might be using these interchangeably [field / parameter / argument]
+    /// I am using [field / parameter / argument] interchangeably
     pub fn assemble(mut self) -> Penum<Assembled> {
         let variants = &self.subject.get_variants();
         let name = &self.subject.ident;
@@ -83,15 +86,17 @@ impl Penum<Disassembled> {
             //    - Failure: add a "no_match_found" error and continue to next variant.
             // 2. Validate each parameter    ...continue...                                 (INNER)
             for (variant_ident, comp_item) in self.subject.get_comparable_fields() {
-                // FIXME: Note, this only affects concrete types.. .compare(..) should return a list of 
+                // FIXME: This only affects concrete types.. but `.compare(..)` should return a list of 
                 //        matches instead of just the first match it finds.
                 //
+                //        # Uni-matcher -> Multi-matcher
                 //        Currently, we can end up returning a pattern that matches in shape, but not in structure, even though another 
-                //        pattern could satisfy our variant. I guess one could think of it as a "catch all" . 
+                //        pattern could satisfy our variant. In a case like the one below, we have a "catch all" variadic. 
                 //
                 //        e.g. (i32, ..) | (..) => V1(String, i32), V2(String, String)
                 //                                    ^^^^^^           ^^^^^^
-                //                               `Found 'String' but expected 'i32'`
+                //                                    |                |
+                //                                    `Found 'String' but expected 'i32'`
                 //
                 //        Because the first pattern fragment contains a concrete type, it should be possible mark the 
                 //        error as temporary and then check for other pattern matches. Note, the first error should always 
@@ -105,6 +110,13 @@ impl Penum<Disassembled> {
                 //          (i32: ^Trait, ..) | (..)
                 //
                 //        For future reference! This should help with dispach inference.
+                //
+                //        # "catch-all" syntax
+                //        Given the example above, if we were to play with it a little, we could end up with something like this:
+                //        `(i32, ..) | _` that translate to `(i32, ..) | (..) | {..}`
+                //
+                //        Maybe it's something that would be worth having considering something like this:
+                //        `_ where String: ^AsRef<str>`
 
 
                 // 1. Check if we match in `shape` 
@@ -164,10 +176,10 @@ impl Penum<Disassembled> {
                                 // 3. Dispachable list
                                 if let Some(ref dispach_members) = dispatchables {
                                     // FIXME: We are only expecting one dispatch per generic now, so CHANGE THIS WHEN POSSIBLE:
-                                    //        - `where T: ^Trait, T: ^Mate` -> only `^Trait` will be found. :(
-                                    //        - `where T: ^Trait + ^Mate`   -> should be just turn this into a poly map instead?
+                                    //        - where T: ^Trait, T: ^Mate -> only ^Trait will be found. :(
+                                    //        - where T: ^Trait + ^Mate   -> should be just turn this into a poly map instead?
                                     //
-                                    // `where T: ^Trait + ^Mate, T: ^Fate, T: ^Mate` turns into `T => [^Trait, ^Mate, ^Fate]`
+                                    // where T: ^Trait + ^Mate, T: ^Fate, T: ^Mate turns into T => [^Trait, ^Mate, ^Fate]
 
                                     // I had to use a vec instead because of partial ordering not being implemented for TraitBound
                                     // 
@@ -187,23 +199,24 @@ impl Penum<Disassembled> {
                                                 match x {
                                                     syn::TraitItem::Type(_) => todo!(),
                                                     syn::TraitItem::Method(TraitItemMethod {
-                                                        attrs,
+                                                        // attrs,
                                                         sig,
-                                                        semi_token,
+                                                        // semi_token,
                                                         ..
                                                     }) => {
                                                         let Signature {
-                                                            constness,
-                                                            asyncness,
-                                                            unsafety,
-                                                            abi,
+                                                            // constness,
+                                                            // asyncness,
+                                                            // unsafety,
+                                                            // abi,
                                                             fn_token,
                                                             ident,
                                                             generics,
-                                                            paren_token,
-                                                            inputs,
-                                                            variadic,
+                                                            // paren_token,
+                                                            // inputs,
+                                                            // variadic,
                                                             output,
+                                                            ..
                                                         } = sig;
                                                         let mefields = comp_item.value.borrow();
 
@@ -217,11 +230,11 @@ impl Penum<Disassembled> {
                                                         //    2. &T has default, use a static lazycell (to support non-const [non-primitive / non-copy] types)?
                                                         // - Last resort -> panic
 
-                                                        let tr_name = &asref.ident;
+                                                        let _tr_name = &asref.ident;
                                                         // We could call it with the receiver type
                                                         // - AsRef::as_ref(&self #(,#args)*) 
                                                         // - `#tr_name::#fn_name (&self #(,#args)*);`
-                                                        let impItem: ImplItem = parse_quote!(
+                                                        let _imp_item: ImplItem = parse_quote!(
                                                             #fn_token #ident #generics () #output {
                                                                 match self {
                                                                     #name::#variant_ident #mefields => x.#ident (),
@@ -230,13 +243,10 @@ impl Penum<Disassembled> {
                                                             }
                                                         );
 
-                                                        println!("\n\n What {} \n\n", impItem.get_string());
+                                                        println!("\n\n What {} \n\n", _imp_item.get_string());
                                                     }
                                                     _ => todo!(),
                                                     // I don't want to handle these right now.
-                                                    // syn::TraitItem::Const(_) => todo!(),
-                                                    // syn::TraitItem::Macro(_) => todo!(),
-                                                    // syn::TraitItem::Verbatim(_) => todo!(),
                                                 }
                                             });
 
@@ -261,6 +271,7 @@ impl Penum<Disassembled> {
                 }
             }
 
+            // FIXME: Instead of extending the enums where clause with predicate assertion, use spanned_quote
             // Extend our expr where clause with `impl Trait` bounds if found. (predicates)
             let penum_expr_clause = self.expr.clause.get_or_insert_with(|| parse_quote!(where));
 
@@ -270,27 +281,6 @@ impl Penum<Disassembled> {
 
             // Might be a little unnecessary to loop through our predicates again.. But we can refactor later.
             // penum_expr_clause.predicates.iter().filter_map(f)
-
-            // if let WherePredicate::Type(pred_ty) = pred {
-            //     pred_ty.bounds.iter().filter_map(|p| {
-            //         match p {
-            //             TypeParamBound::Trait(tr) if tr.dispatch.is_some() => Some(tr),
-            //             _ => None
-            //         }
-            //     }).for_each(|tr_bound| {
-
-            //         println!("Dispatch {} for {}", tr_bound.to_token_stream(), self.subject.ident);
-            //     });
-            // }
-
-            // if let Some(match_pat) = self.expr.find_predicate(|pred| {
-            //     // pred.bounded_ty
-            //     // Find match where pred is dispatchable and is identical to pat_ty
-            //     todo!()
-            // }) {
-            //     // match_pat.
-            //     todo!()
-            // }
         } else {
             self.error
                 .extend(variants.span(), "Expected to find at least one variant.");
