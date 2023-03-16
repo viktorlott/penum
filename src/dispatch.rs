@@ -14,6 +14,7 @@ pub struct Dispatchable {
     pub trait_decl: ItemTrait,
 }
 
+
 /// For each <Dispatchable> -> <{ position, ident, fields }>
 /// Used for dispatching
 pub enum Position {

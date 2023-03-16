@@ -1,3 +1,5 @@
 /target
 /Cargo.lock
 /wip
+/traits/target
+/traits/Cargo.lock
