@@ -18,6 +18,8 @@ use syn::TraitItemMethod;
 use syn::Type;
 use syn::{parse_quote, spanned::Spanned, Error};
 
+use crate::dispatch::Dispatchable;
+use crate::dispatch::Std;
 use crate::factory::ComparablePats;
 
 use crate::{
@@ -184,7 +186,13 @@ impl Penum<Disassembled> {
                                     // 
                                     if let Some(disp_map) = dispach_members.get(&pat_ty) {
                                         disp_map.iter().for_each(|tb| {
-                                            let asref = construct();
+
+                                            let name = tb.path.get_ident().unwrap().to_string();
+                                            
+                                            let s: Std = name.as_str().parse().unwrap();
+
+
+                                            let tr = Dispatchable::from(s);
 
                                             let path = &tb.path;
 
@@ -194,7 +202,7 @@ impl Penum<Disassembled> {
                                                 }
                                             );
                                             // TODO: THIS IS UNDER DEVELOPMENT. Support core and std trait first.
-                                            asref.items.iter().for_each(|x| {
+                                            tr.0.items.iter().for_each(|x| {
                                                 match x {
                                                     syn::TraitItem::Type(_) => todo!(),
                                                     syn::TraitItem::Method(TraitItemMethod {
@@ -229,7 +237,7 @@ impl Penum<Disassembled> {
                                                         //    2. &T has default, use a static lazycell (to support non-const [non-primitive / non-copy] types)?
                                                         // - Last resort -> panic
 
-                                                        let _tr_name = &asref.ident;
+                                                        let _tr_name = &tr.0.ident;
                                                         // We could call it with the receiver type
                                                         // - AsRef::as_ref(&self #(,#args)*) 
                                                         // - `#tr_name::#fn_name (&self #(,#args)*);`
@@ -253,7 +261,7 @@ impl Penum<Disassembled> {
                                                 "DISPACHER -> {}: FULL {} \n {} \n {}",
                                                 tb.path.get_ident().get_string(),
                                                 tb.path.get_string(),
-                                                asref.get_string(),
+                                                tr.0.get_string(),
                                                 imp.get_string()
                                             );
                                         })
@@ -316,7 +324,7 @@ impl Penum<Assembled> {
     fn link_bounds(self: &mut Penum<Assembled>) -> Vec<TokenStream2> {
         let mut bound_tokens = Vec::new();
 
-        // println!("{}", pred.to_token_stream());
+
         if let Some(where_cl) = self.expr.clause.as_ref() {
             where_cl
                 .predicates
