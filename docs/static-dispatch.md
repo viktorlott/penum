@@ -119,7 +119,6 @@ and then it would be difficult to know which one should be dispatched..
    Knowing that this syntax makes it a little confusing towards unmatched variants. e.g.
 
 
-### Dispatch semantics
 
 ```rust
 struct Random;
@@ -149,8 +148,79 @@ enum dispatched {
 ```
 
 
+### Dispatch semantics
 
-<!-- 
- ```rust
-   #[penum( (T) | (T,  U) where  T: ^Trait + Tiart, U: Trait )]
-   ``` -->
+One of the problems with implementing some sort of derived dispatch solution for enums is that most of the time the variants aren't even dispatchable.
+When a variant isn't dispatchable, we often have to look at the trait method signature to be able to figure out what we can do.
+
+Without knowing any specifics about the overall program (e.g knowing that we have implemented something for a type in another module), so that the only option for us is to deduce the meaning through semantically understanding the penum expression and the subject (that being the enum itself). 
+- The type and its position in the pattern.
+  - So for each variant that matches a certain pattern where one or more of the trait bound members are marked for dispatch, we build a candidate list
+  where each candidate contains information about what variant it matched, what position it matched on, and what type it matched on.
+  Given this list, we can better understand how we would solve problems like: 
+  a. Variants without a dispatch match (e.g the might have matched for another pattern that didn't contain a dispatch member).
+  b. Variants that match but where the type differs from previous matches.
+- The trait signature.
+  - This gives us information about how the actual method we are dispaching should handle variants that can't be dispatched.
+    - Method signature without a return type can be handled by just matching the variant with a Unit type.
+    - Method signature with a return type is handled differently depending on the return type implementations.
+      - Return type implements Default and the value is owned:
+        - Then we just match with `Default::default()`
+      - Return type doesn't implements Default and the value is owned:
+        - Then we might do a Option<T> wrap and return None
+
+      - Return type implements Default and but it's a reference:
+        - Can the type be const evaluated in a static declaration, then we of course do that.
+        - If it cannot be const evaluated in a static declaration, then we might need to use `LazyCell`.
+
+      - Return type doesn't implement Default -> Then we handle it by the use of semantic analyzing
+        - If it's a core/std lib type, could we somehow know how to handle it?
+        - If we don't know anything about the type, should we 
+          a. Option<T> wrap it for the user?
+          b. Add panic handlers?
+          c. Try to 
+
+
+   It should also be possible to use `impl ^Trait` to become a dispatchable candidate.
+   Knowing that this syntax makes it a little confusing towards unmatched variants. e.g.
+
+
+
+```rust
+// Question is, should we always assume that a dispatch candidate always implements Default, or should we be required to specify it?.
+// Feels like it should be specified.
+// If we don't specify it, should we then just Option wrap it?
+#[penum( (T, U) where T: ^AsRef<str> + Default )]
+enum Disp {
+    V1(String, i32),
+    V2
+}
+impl AsRef<str> for Disp where String: Default {
+    fn as_ref(&self) -> &str {
+        match Self {
+            Self::V1(arg1, ..) => AsRef::<str>::as_ref(self),
+            Self::V2 => Default::default()
+        }
+    }
+}
+// -----------------------------------------------
+// This won't work..
+#[penum( (T, ..) where T: ^AsRef<str> )]
+enum Disp {
+    V1(String, i32),
+    V2,
+}
+impl<'a> AsRef<Option<&'a str>> for Disp
+where
+    Self: 'a,
+    String: Default,
+{
+    fn as_ref(&self) -> &Option<&str> {
+        match self {
+            Self::V1(arg1, ..) => &Some(AsRef::as_ref(arg1)),
+            Self::V2 => &None,
+        }
+    }
+}
+```
+
