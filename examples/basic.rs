@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use penum::{penum};
+use std::ops::Add;
 
 trait Trait {}
 impl Trait for f32 {}
@@ -31,6 +32,23 @@ enum Concrete<'a> {
 enum Variadic {
     V1(i32, usize, String, u8, u16),
 }
+
+
+#[penum( (_, _, T, _) | (U, T) | (T) | { n: U, .. } where U: ^Add<i32>, T: ^AsRef<str> )]
+enum Foo {
+    Bar(i32, String),
+    Bar1(i32, i32, String, i32),
+    Bar2(i32, String),
+    Bar3 { n: i32 },
+    Bar4(String),
+    Bar5 { n: i32, m: String },
+}
+
+#[penum( (impl Add<i32>, ..) )]
+enum Foo2 {
+    Bar(i32, String),
+}
+
 
 fn main() {
     match Vector3::Integer(10, 10.0, 10) {
