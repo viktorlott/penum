@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, ops::Deref};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    collections::BTreeMap,
+    ops::{Deref, DerefMut},
+};
 
 use proc_macro2::{Ident, Span};
 use quote::ToTokens;
@@ -7,21 +11,19 @@ use syn::{
     punctuated::Punctuated,
     spanned::Spanned,
     token::{self, Comma},
-    Arm, Field, FnArg, Pat, Signature, TraitItem, TraitItemMethod,
+    Arm, Binding, Field, FnArg, Pat, Signature, TraitItem, TraitItemMethod, TraitItemType, parse_str, ExprMacro, Macro, parse_quote, Type,
 };
 
-use crate::{factory::TraitBound};
+use crate::factory::TraitBound;
 
 use standard::{StandardTrait, TraitSchematic};
 
 mod standard;
 
-pub trait Sanitize {
-    fn sanitize(&self) -> String;
-}
-
-pub type BlueprintMap<'bound> = BTreeMap<String, Vec<Blueprint<'bound>>>;
-pub type Blueprints<'bound> = Vec<Blueprint<'bound>>;
+#[repr(transparent)]
+#[derive(Default)]
+pub struct Blueprints<'bound>(BTreeMap<String, Vec<Blueprint<'bound>>>);
+// pub type Blueprints<'bound> = Vec<Blueprint<'bound>>;
 
 /// This blueprint contains everything we need to construct an impl statement.
 ///
@@ -109,6 +111,140 @@ impl<'bound> Blueprint<'bound> {
             methods: Default::default(),
         }
     }
+
+    pub fn get_associated_methods(&self) -> Vec<TraitItemMethod> {
+        let mut meths = vec![];
+
+        if let Some(types) = self.get_generics() {
+
+            self.schematic.generics.params.iter().filter_map(|param| match param {
+                syn::GenericParam::Type(ty) => Some(ty.ident.clone()),
+                _ => None
+            }).zip(types).for_each(|(left, right)| {
+                println!("{} - {}", left.to_token_stream(), right.to_token_stream());
+            });
+        }
+
+        for method in self.get_methods() {
+            if let Some(method_arms) = self.methods.get(&method.sig.ident) {
+                let TraitItemMethod { ref sig, .. } = method;
+                let panic = parse_str::<ExprMacro>("panic!(\"Missing arm\")").unwrap();
+
+                // let output = sig.output;
+
+                let item: TraitItemMethod = parse_quote!(
+                    #sig {
+                        match self {
+                            #(#method_arms,)*
+                            _ => #panic
+                        }
+                    }
+                );
+
+                meths.push(item);
+            }
+        }
+        meths
+    }
+
+    fn get_return(&self) {
+
+    }
+
+    /// Used to zip `get_bindings` and `get_types` together.
+    ///
+    /// ```rust
+    /// struct A where i32: Deref<Target = i32>; // <-- Trait bound
+    /// 
+    /// trait Deref for A {
+    ///     type Target; // <-- Associated type
+    ///     fn deref(&self) -> &Target;
+    /// }
+    /// 
+    /// type Target = i32; // <-- mapped associated type
+    /// ``
+    pub fn get_associated_types(&self) -> Option<Vec<TraitItemType>> {
+        let Some(bindings) = self.get_bindings() else {
+            return None
+        };
+        
+        let mut assocs = self.get_types().collect::<Vec<_>>();
+
+        for binding in bindings {
+            let Some(matc) = assocs.iter_mut().find_map(|assoc| assoc.ident.eq(&binding.ident).then_some(assoc)) else {
+                panic!("Missing associated trait bindings")
+            };
+
+            if matc.default.is_none() {
+                matc.default = Some((binding.eq_token, binding.ty.clone()));
+            }
+        }
+
+        Some(assocs)
+    }
+
+    
+    /// Used to extract all bindings in a trait bound
+    ///
+    /// ```rust
+    /// struct A where i32: Deref<Target = i32>; // <-- Trait bound
+    /// ``
+    fn get_bindings(&self) -> Option<impl Iterator<Item = &Binding>> {
+        let path_segment = self.bound.path.segments.last().unwrap();
+        match path_segment.arguments.borrow() {
+            syn::PathArguments::AngleBracketed(angle) => {
+                Some(angle.args.iter().filter_map(|arg| match arg {
+                    syn::GenericArgument::Binding(binding) => Some(binding),
+                    _ => None,
+                }))
+            }
+            _ => None,
+        }
+    }
+
+    fn get_generics(&self) -> Option<impl Iterator<Item = &Type>> {
+        let path_segment = self.bound.path.segments.last().unwrap();
+        match path_segment.arguments.borrow() {
+            syn::PathArguments::AngleBracketed(angle) => {
+                Some(angle.args.iter().filter_map(|arg| match arg {
+                    syn::GenericArgument::Type(ty) => Some(ty),
+                    _ => None,
+                }))
+            }
+            _ => None,
+        }
+    }
+
+
+    /// Used to extract all associated types in a trait
+    ///
+    /// ```rust
+    /// trait Deref for A {
+    ///     type Target; // <-- Associated type
+    ///     fn deref(&self) -> &Target;
+    /// }
+    /// ```
+    fn get_types(&self) -> impl Iterator<Item = TraitItemType> + '_ {
+        self.schematic.items.iter().filter_map(|item| match item {
+            TraitItem::Type(ty) => Some(ty.clone()),
+            _ => None,
+        })
+    }
+
+      /// Used to extract all associated methods in a trait
+    ///
+    /// ```rust
+    /// trait Deref for A {
+    ///     type Target; 
+    ///     fn deref(&self) -> &Target; // <-- Associated method
+    /// }
+    /// ```
+    fn get_methods(&self) -> impl Iterator<Item = TraitItemMethod> + '_ {
+        self.schematic.items.iter().filter_map(|item| match item {
+            TraitItem::Method(method) => Some(method.clone()),
+            _ => None,
+        })
+    }
 }
 
 impl<'info> VariantSignature<'info> {
@@ -141,7 +277,7 @@ impl<'info> VariantSignature<'info> {
         } = self;
 
         let (method_ident, sanitized_input) = get_method_parts(method);
-        // println!("{} :: {} {} => {} . {} ({})", enum_ident.to_token_stream(), variant_ident.to_token_stream(), fields.to_token_stream(), caller.to_token_stream(), method_ident.to_token_stream(), sanitized_input.to_token_stream());
+
         (
             method_ident,
             parse_quote_spanned! {span.span() => #enum_ident :: #variant_ident #fields => #caller . #method_ident (#sanitized_input)},
@@ -150,7 +286,7 @@ impl<'info> VariantSignature<'info> {
 }
 
 impl<'bound> Blueprint<'bound> {
-    pub fn attatch(&mut self, variant_sig: &VariantSignature) {
+    pub fn attach(&mut self, variant_sig: &VariantSignature) {
         let mut arms: BTreeMap<Ident, Vec<Arm>> = Default::default();
 
         for item in self.schematic.items.iter() {
@@ -175,27 +311,6 @@ impl<'bound> Blueprint<'bound> {
             }
         })
     }
-}
-
-fn sanitize(inputs: &Punctuated<FnArg, Comma>) -> Punctuated<Pat, Comma> {
-    let mut san = Punctuated::new();
-    let max = inputs.len();
-    inputs.iter().enumerate().for_each(|(i, arg)| match arg {
-        syn::FnArg::Receiver(_) => (),
-        syn::FnArg::Typed(typed) => {
-            san.push_value(typed.pat.deref().clone());
-            if i != max - 1 {
-                san.push_punct(Comma(Span::call_site()));
-            }
-        }
-    });
-    san
-}
-
-fn get_method_parts(method: &TraitItemMethod) -> (&Ident, Punctuated<Pat, Comma>) {
-    let TraitItemMethod { sig, .. } = method;
-    let Signature { ident, inputs, .. } = sig;
-    (ident, sanitize(inputs))
 }
 
 impl<'a> Position<'a> {
@@ -252,4 +367,39 @@ impl ToTokens for Param {
             Param::Rest => token::Dot2(Span::call_site()).to_tokens(tokens),
         }
     }
+}
+
+impl<'bound> Deref for Blueprints<'bound> {
+    type Target = BTreeMap<String, Vec<Blueprint<'bound>>>;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.borrow()
+    }
+}
+
+impl<'bound> DerefMut for Blueprints<'bound> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0.borrow_mut()
+    }
+}
+
+fn sanitize(inputs: &Punctuated<FnArg, Comma>) -> Punctuated<Pat, Comma> {
+    let mut san = Punctuated::new();
+    let max = inputs.len();
+    inputs.iter().enumerate().for_each(|(i, arg)| match arg {
+        syn::FnArg::Receiver(_) => (),
+        syn::FnArg::Typed(typed) => {
+            san.push_value(typed.pat.deref().clone());
+            if i != max - 1 {
+                san.push_punct(Comma(Span::call_site()));
+            }
+        }
+    });
+    san
+}
+
+fn get_method_parts(method: &TraitItemMethod) -> (&Ident, Punctuated<Pat, Comma>) {
+    let TraitItemMethod { sig, .. } = method;
+    let Signature { ident, inputs, .. } = sig;
+    (ident, sanitize(inputs))
 }
