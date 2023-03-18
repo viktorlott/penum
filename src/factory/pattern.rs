@@ -1,14 +1,14 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, borrow::Borrow};
 
 use syn::{
     punctuated::{Iter, Punctuated},
-    token::{self},
+    token::{self, Trait},
     ExprRange, Field, Ident, Token,
 };
 
 use quote::ToTokens;
 
-use crate::penum::Stringify;
+use crate::{penum::Stringify, dispatch::{BlueprintMap, Schematic, Blueprint}};
 
 use super::{
     Comparable, PredicateType, PunctuatedParameters, TraitBound, WhereClause, WherePredicate,
@@ -17,6 +17,9 @@ use super::{
 mod boilerplate;
 mod parse;
 mod to_tokens;
+
+/// T -> [AsRef, Add]
+type DispatchMap = BTreeMap<String, Vec<TraitBound>>;
 
 /// #### A Penum expression consists of one or more patterns, and an optional WhereClause.
 ///
@@ -152,7 +155,7 @@ impl PenumExpr {
                         let mut bounds: Vec<TraitBound> = pred_ty
                             .bounds
                             .iter()
-                            .filter_map(|b| b.get_dispatchable_trait_bound())
+                            .filter_map(|b| b.get_dispatchable_trait_bound().map(Clone::clone))
                             .collect();
 
                         if bounds.is_empty() {
@@ -165,6 +168,41 @@ impl PenumExpr {
                             entry.append(&mut bounds)
                         } else {
                             polymap.insert(ty, bounds);
+                        }
+                    }
+                });
+            (!polymap.is_empty()).then_some(polymap)
+        } else {
+            None
+        }
+    }
+
+    /// This should probably be refactored...
+    pub fn get_blueprints(&self) -> Option<BlueprintMap> {
+        if self.has_predicates() {
+            let mut polymap: BlueprintMap = Default::default();
+            // SAFETY: We can only have predicates if we have a where clause.
+            unsafe { self.clause.as_ref().unwrap_unchecked() }
+                .predicates
+                .iter()
+                .for_each(|pred| {
+                    if let WherePredicate::Type(pred_ty) = pred {
+                        let mut blueprints: Vec<Blueprint> = pred_ty
+                            .bounds
+                            .iter()
+                            .filter_map(|b| b.get_dispatchable_trait_bound().map(Blueprint::from))
+                            .collect();
+
+                        if blueprints.is_empty() {
+                            return;
+                        }
+
+                        let ty = pred_ty.bounded_ty.get_string();
+
+                        if let Some(entry) = polymap.get_mut(&ty) {
+                            entry.append(&mut blueprints)
+                        } else {
+                            polymap.insert(ty, blueprints);
                         }
                     }
                 });
