@@ -49,8 +49,20 @@ impl MultiMethod for i32 {
     }
 }
 
+impl MultiMethod for String {
+    fn call_one(&mut self) {
+        todo!()
+    }
 
-#[penum( (_, _, T, _) | (U, T) | (T) | { n: U, .. } where U: ^Add<i32> + ^MultiMethod, T: ^AsRef<str> )]
+    fn call_two(&mut self) {
+        todo!()
+    }
+}
+
+
+
+
+#[penum( (_, _, T, _) | (U, T) | (T) | { n: U, .. } where U: ^Add<i32> + ^MultiMethod, T: ^AsRef<str>, T: ^MultiMethod + ^AsRef<str> )]
 enum Foo {
     Bar(i32, String),
     Bar1(i32, i32, String, i32),

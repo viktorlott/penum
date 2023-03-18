@@ -1,25 +1,21 @@
-use std::{collections::BTreeMap, borrow::Borrow};
-
 use syn::{
     punctuated::{Iter, Punctuated},
-    token::{self, Trait},
+    token,
     ExprRange, Field, Ident, Token,
 };
 
 use quote::ToTokens;
 
-use crate::{penum::Stringify, dispatch::{BlueprintMap, Schematic, Blueprint}};
+use crate::{penum::Stringify, dispatch::{BlueprintMap, Blueprint}};
 
 use super::{
-    Comparable, PredicateType, PunctuatedParameters, TraitBound, WhereClause, WherePredicate,
+    Comparable, PredicateType, PunctuatedParameters, WhereClause, WherePredicate,
 };
 
 mod boilerplate;
 mod parse;
 mod to_tokens;
 
-/// T -> [AsRef, Add]
-type DispatchMap = BTreeMap<String, Vec<TraitBound>>;
 
 /// #### A Penum expression consists of one or more patterns, and an optional WhereClause.
 ///
@@ -118,11 +114,7 @@ impl PenumExpr {
             .iter()
             .map(|s| s.to_token_stream().to_string())
             .reduce(|acc, s| {
-                if acc.is_empty() {
-                    s
-                } else {
-                    format!("{acc} | {s}")
-                }
+                acc.is_empty().then(|| s.clone()).unwrap_or_else(|| format!("{acc} | {s}"))
             })
             .unwrap()
     }
@@ -140,41 +132,6 @@ impl PenumExpr {
 
     pub fn has_clause(&self) -> bool {
         self.clause.is_some()
-    }
-
-    /// This should probably be refactored...
-    pub fn get_dispatchable_members(&self) -> Option<BTreeMap<String, Vec<TraitBound>>> {
-        if self.has_predicates() {
-            let mut polymap: BTreeMap<String, Vec<TraitBound>> = Default::default();
-            // SAFETY: We can only have predicates if we have a where clause.
-            unsafe { self.clause.as_ref().unwrap_unchecked() }
-                .predicates
-                .iter()
-                .for_each(|pred| {
-                    if let WherePredicate::Type(pred_ty) = pred {
-                        let mut bounds: Vec<TraitBound> = pred_ty
-                            .bounds
-                            .iter()
-                            .filter_map(|b| b.get_dispatchable_trait_bound().map(Clone::clone))
-                            .collect();
-
-                        if bounds.is_empty() {
-                            return;
-                        }
-
-                        let ty = pred_ty.bounded_ty.get_string();
-
-                        if let Some(entry) = polymap.get_mut(&ty) {
-                            entry.append(&mut bounds)
-                        } else {
-                            polymap.insert(ty, bounds);
-                        }
-                    }
-                });
-            (!polymap.is_empty()).then_some(polymap)
-        } else {
-            None
-        }
     }
 
     /// This should probably be refactored...

@@ -80,6 +80,7 @@ pub fn string<T: ToTokens>(x: &T) -> String {
     x.to_token_stream().to_string()
 }
 
+#[allow(dead_code)]
 pub fn ident_impl(imptr: &TypeImplTrait) -> Ident {
     format_ident!(
         "__IMPL_{}",
