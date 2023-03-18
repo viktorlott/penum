@@ -1,3 +1,5 @@
+use std::{process::Output, ops::Add};
+
 use syn::{
     punctuated::{Iter, Punctuated},
     token,
@@ -6,7 +8,7 @@ use syn::{
 
 use quote::ToTokens;
 
-use crate::{penum::Stringify, dispatch::{BlueprintMap, Blueprint}};
+use crate::{penum::Stringify, dispatch::{Blueprints, Blueprint}};
 
 use super::{
     Comparable, PredicateType, PunctuatedParameters, WhereClause, WherePredicate,
@@ -135,9 +137,9 @@ impl PenumExpr {
     }
 
     /// This should probably be refactored...
-    pub fn get_blueprints(&self) -> Option<BlueprintMap> {
+    pub fn get_blueprints(&self) -> Option<Blueprints> {
         if self.has_predicates() {
-            let mut polymap: BlueprintMap = Default::default();
+            let mut polymap: Blueprints = Default::default();
             // SAFETY: We can only have predicates if we have a where clause.
             unsafe { self.clause.as_ref().unwrap_unchecked() }
                 .predicates
@@ -187,6 +189,7 @@ impl PenumExpr {
         }
     }
 }
+
 
 impl ParameterKind {
     /// This is useful when we just want to check if we should care about

@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use proc_macro::TokenStream;
@@ -8,6 +9,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::format_ident;
 use quote::ToTokens;
 
+use syn::ItemImpl;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
 
@@ -33,6 +35,7 @@ pub struct Penum<State = Disassembled> {
     pub subject: Subject,
     pub error: Diagnostic,
     pub types: PolymorphicMap,
+    pub impls: Vec<ItemImpl>,
     _marker: PhantomData<State>,
 }
 
@@ -43,6 +46,7 @@ impl Penum<Disassembled> {
             subject,
             error: Default::default(),
             types: Default::default(),
+            impls: Default::default(),
             _marker: Default::default(),
         }
     }
@@ -137,8 +141,7 @@ impl Penum<Disassembled> {
 
                     if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
                         // FIXME: SUPPORT DISPATCHING FROM `impl Trait` expressions. e.g (impl ^Trait) | (_, _)
-                        //
-                        // Should we infer dispatching also?
+                        //        Should we infer dispatching also?
                         let id = match ty_impl_trait.bounds.first().unwrap() {
                             syn::TypeParamBound::Trait(t) => {
                                 t.path.segments.last().unwrap().ident.get_string()
@@ -146,8 +149,7 @@ impl Penum<Disassembled> {
                             syn::TypeParamBound::Lifetime(_) => continue,
                         };
 
-                        // We use a `dummy` identifier to store our bound under.
-                        // let tty = ident_impl(ty_impl_trait);
+                        // We use a `dummy` identifier to store our bounds under.
                         let tty = format_ident!("_IMPL_{id}");
                         let bounds = &ty_impl_trait.bounds;
 
@@ -175,6 +177,10 @@ impl Penum<Disassembled> {
                         let Some(blueprints) = blueprints.as_mut().and_then(|bp| bp.get_mut(&pat_ty)) else {
                             continue
                         };
+                        // FIXME: We are only expecting one dispatch per generic now, so CHANGE THIS WHEN POSSIBLE:
+                        //        where T: ^Trait, T: ^Mate -> only ^Trait will be found. :( Fixed?
+                        //        where T: ^Trait + ^Mate   -> should be just turn this into a poly map instead?
+                        //
 
                         let variant_sig = VariantSignature::new(
                             enum_ident,
@@ -183,15 +189,8 @@ impl Penum<Disassembled> {
                             max_fields_len,
                         );
 
-                        // FIXME: We are only expecting one dispatch per generic now, so CHANGE THIS WHEN POSSIBLE:
-                        //        - where T: ^Trait, T: ^Mate -> only ^Trait will be found. :( Fixed?
-                        //        - where T: ^Trait + ^Mate   -> should be just turn this into a poly map instead?
-                        //
-                        // where T: ^Trait + ^Mate, T: ^Fate, T: ^Mate turns into T => [^Trait, ^Mate, ^Fate]
-
-                        // I had to use a vec instead because of partial ordering not being implemented for TraitBound
                         for blueprint in blueprints.iter_mut() {
-                            blueprint.attatch(&variant_sig)
+                            blueprint.attach(&variant_sig)
                         }
                     } else if item_ty.ne(&pat_ty) {
                         self.error.extend(
@@ -202,23 +201,35 @@ impl Penum<Disassembled> {
                 }
             }
 
+
+
             // [Generic]
             //     [Trait]
             //         [Method]
             //             [Arm -> dispatch]
             if let Some(blueprints) = blueprints {
-                for (ident, blueprints) in blueprints.iter() {
-                    println!("{}", ident);
+                
+                for (_, blueprints) in blueprints.iter() {
+                    // println!("{}", ident);
+                    
+                    for blueprint in blueprints.iter() {
+                        // println!("|-{}", blueprint.bound.path.to_token_stream());
 
-                    blueprints.iter().for_each(|blueprint| {
-                        println!("|-{}", blueprint.bound.path.to_token_stream());
-                        blueprint.methods.iter().for_each(|arm| {
-                            println!("  |- {}", arm.0);
-                            arm.1
-                                .iter()
-                                .for_each(|ar| println!("     |- {}", ar.to_token_stream()));
-                        })
-                    })
+                        let path = blueprint.bound.path.borrow();
+                        
+                        if let Some(assocs) = blueprint.get_associated_types() {
+                            let methods = blueprint.get_associated_methods();
+                            let implementation: ItemImpl = parse_quote!(
+                                impl #path for #enum_ident {
+                                    #(#assocs)*
+
+                                    #(#methods)*
+                                }
+                            );
+
+                            self.impls.push(implementation);
+                        }
+                    }
                 }
             }
 
@@ -248,7 +259,13 @@ impl Penum<Assembled> {
 
         self.error
             .map(Error::to_compile_error)
-            .unwrap_or_else(|| self.extend_enum_with(&bound_tokens).to_token_stream())
+            .unwrap_or_else(|| {
+                let enum_item = self.extend_enum_with(&bound_tokens).to_token_stream();
+                let impl_items = self.impls;
+                let cool = quote::quote!(#enum_item #(#impl_items)*);
+                println!("{}", cool.to_token_stream());
+                cool
+            })
             .into()
     }
 
