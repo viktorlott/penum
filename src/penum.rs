@@ -1,36 +1,28 @@
 use std::borrow::Borrow;
-use std::collections::BTreeMap;
 
 use std::marker::PhantomData;
 
 use proc_macro::TokenStream;
-use proc_macro2::Ident;
+
 use proc_macro2::TokenStream as TokenStream2;
 use quote::format_ident;
 use quote::ToTokens;
-use syn::Arm;
 
-use syn::parse_str;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
-use syn::Fields;
-use syn::ItemTrait;
-use syn::Signature;
-use syn::TraitItemMethod;
+
 use syn::Type;
 use syn::{parse_quote, spanned::Spanned, Error};
 
-use crate::dispatch::Dispatchable;
+use crate::dispatch::FieldInformation;
 use crate::dispatch::Position;
-use crate::dispatch::Std;
 use crate::factory::ComparablePats;
 
-use crate::factory::TraitBound;
 use crate::{
     dispatch::DispatchMap,
     error::Diagnostic,
     factory::{PenumExpr, Subject, WherePredicate},
-    utils::{ident_impl, no_match_found, string, PolymorphicMap},
+    utils::{no_match_found, string, PolymorphicMap},
 };
 
 pub struct Disassembled;
@@ -63,25 +55,23 @@ impl Penum<Disassembled> {
     /// I am using [field / parameter / argument] interchangeably
     pub fn assemble(mut self) -> Penum<Assembled> {
         let variants = &self.subject.get_variants();
-        let enum_name = &self.subject.ident;
+        let enum_ident = &self.subject.ident;
 
         if !variants.is_empty() {
-            let _something: BTreeMap<Ident, Fields> = Default::default();
-
             // The point is that as we check for equality, we also do impl assertions
             // by extending the `subjects` where clause. This is something that we might
             // want to change in the future and instead use `spanned_quote` or some other
             // bound assertion.
             let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
 
-            // Prepare our patterns by converting them into `Comparables`. This is just a wrapper type that contains
-            // commonly used props.
-            let comparable_patterns: ComparablePats = self.expr.borrow().into();
+            // Prepare our patterns by converting them into `Comparables`. This is just a wrapper type
+            // that contains commonly used props.
+            let comparable_pats: ComparablePats = self.expr.borrow().into();
 
             // We pre-check for clause because we might be needing this during the dispatch step.
             // Should add `has_dispatchable_member` maybe? let has_clause = self.expr.has_clause();
             // Turn into iterator instead?
-            let dispatchables = self.expr.get_dispatchable_members();
+            let mut blueprints = self.expr.get_blueprints();
 
             // Expecting failure like `variant doesn't match shape`, hence pre-calling.
             let pattern_fmt = self.expr.pattern_to_string();
@@ -95,17 +85,18 @@ impl Penum<Disassembled> {
                 //        matches instead of just the first match it finds.
                 //
                 //        # Uni-matcher -> Multi-matcher
-                //        Currently, we can end up returning a pattern that matches in shape, but not in structure, even though another
-                //        pattern could satisfy our variant. In a case like the one below, we have a "catch all" variadic.
+                //        Currently, we can end up returning a pattern that matches in shape, but not 
+                //        in structure, even though another pattern could satisfy our variant. In a case 
+                //        like the one below, we have a "catch all" variadic.
                 //
                 //        e.g. (i32, ..) | (..) => V1(String, i32), V2(String, String)
                 //                                    ^^^^^^           ^^^^^^
                 //                                    |                |
                 //                                    `Found 'String' but expected 'i32'`
                 //
-                //        Because the first pattern fragment contains a concrete type, it should be possible mark the
-                //        error as temporary and then check for other pattern matches. Note, the first error should always
-                //        be the default one.
+                //        Because the first pattern fragment contains a concrete type, it should be possible
+                //        mark the error as temporary and then check for other pattern matches. Note, the first
+                //        error should always be the default one.
                 //
                 //        Given our pattern above, `(..)` should be a fallback pattern.
                 //
@@ -117,14 +108,15 @@ impl Penum<Disassembled> {
                 //        For future reference! This should help with dispach inference.
                 //
                 //        # "catch-all" syntax
-                //        Given the example above, if we were to play with it a little, we could end up with something like this:
+                //        Given the example above, if we were to play with it a little, we could end up with 
+                //        something like this:
                 //        `(i32, ..) | _` that translate to `(i32, ..) | (..) | {..}`
                 //
                 //        Maybe it's something that would be worth having considering something like this:
                 //        `_ where String: ^AsRef<str>`
 
                 // 1. Check if we match in `shape`
-                let Some(matched_pair) = comparable_patterns.compare(&comp_item) else {
+                let Some(matched_pair) = comparable_pats.compare(&comp_item) else {
                     self.error.extend(comp_item.value.span(), no_match_found(comp_item.value, &pattern_fmt));
                     continue
                 };
@@ -149,7 +141,7 @@ impl Penum<Disassembled> {
                     let item_ty = item_field.ty.get_string();
 
                     if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
-                        // TODO: SUPPORT DISPATCHING FROM `impl Trait` expressions. e.g (impl ^Trait) | (_, _)
+                        // FIXME: SUPPORT DISPATCHING FROM `impl Trait` expressions. e.g (impl ^Trait) | (_, _)
                         //
                         // Should we infer dispatching also?
                         let id = match ty_impl_trait.bounds.first().unwrap() {
@@ -159,7 +151,7 @@ impl Penum<Disassembled> {
                         
                         // We use a `dummy` identifier to store our bound under.
                         // let tty = ident_impl(ty_impl_trait);
-                        let tty = format_ident!("{}", id);
+                        let tty = format_ident!("_IMPL_{}", id);
                         let bounds = &ty_impl_trait.bounds;
 
                         predicates.push(parse_quote!(#tty: #bounds));
@@ -183,58 +175,24 @@ impl Penum<Disassembled> {
                         self.types.polymap_insert(pat_ty.clone(), item_ty);
 
                         // 3. Dispachable list
-                        if let Some(ref dispach_members) = dispatchables {
-                            // FIXME: We are only expecting one dispatch per generic now, so CHANGE THIS WHEN POSSIBLE:
-                            //        - where T: ^Trait, T: ^Mate -> only ^Trait will be found. :(
-                            //        - where T: ^Trait + ^Mate   -> should be just turn this into a poly map instead?
-                            //
-                            // where T: ^Trait + ^Mate, T: ^Fate, T: ^Mate turns into T => [^Trait, ^Mate, ^Fate]
+                        let Some(blueprints) = blueprints.as_mut().and_then(|bp| bp.get_mut(&pat_ty)) else {
+                            continue
+                        };
 
-                            // I had to use a vec instead because of partial ordering not being implemented for TraitBound
-                            if let Some(disp_map) = dispach_members.get(&pat_ty) {
-                                let pos = item_field
-                                    .ident
-                                    .as_ref()
-                                    .map(|ident| Position::Key(ident.to_string()))
-                                    .unwrap_or(Position::Index(_index_param));
+                        let position = Position::from(item_field, _index_param);
+                        let field_info = FieldInformation::new(enum_ident, variant_ident, &position, max_fields_len);
 
-                                for trait_bound in disp_map.iter() {
-                                    // FIXME: Consider caching parsed traits
-                                    let name = trait_bound
-                                        .path
-                                        .segments
-                                        .last()
-                                        .expect("dispatchable trait to have a name")
-                                        .ident
-                                        .get_string();
+                        // FIXME: We are only expecting one dispatch per generic now, so CHANGE THIS WHEN POSSIBLE:
+                        //        - where T: ^Trait, T: ^Mate -> only ^Trait will be found. :(
+                        //        - where T: ^Trait + ^Mate   -> should be just turn this into a poly map instead?
+                        //
+                        // where T: ^Trait + ^Mate, T: ^Fate, T: ^Mate turns into T => [^Trait, ^Mate, ^Fate]
 
-                                    let Dispatchable::<ItemTrait>(trait_item) =
-                                        name.as_str().parse::<Std>().unwrap().into();
-
-                                    trait_item.items.iter().for_each(|item| {
-                                        if let syn::TraitItem::Method(TraitItemMethod {
-                                            sig: Signature { ident, inputs, .. },
-                                            ..
-                                        }) = item
-                                        {
-
-                                            let inpts = inputs.iter().filter_map(|arg| match arg {
-                                                syn::FnArg::Receiver(_) => None,
-                                                syn::FnArg::Typed(t) => Some(t.pat.get_string()),
-                                            }).collect::<Vec<_>>().join(", ");
-
-
-                                            let position = pos.format_fields(max_fields_len);
-                                            let caller = if let Position::Key(k) = pos.borrow() {k.clone()} else {"val".to_owned()};
-                                            let arm_string = format!("{enum_name}::{variant_ident}{position} => {caller}.{ident}({inpts})");
-                                            let arm = parse_str::<Arm>(&arm_string);
-
-                                            println!("{}", arm.unwrap().to_token_stream());
-                                        }
-                                    })
-                                }
-                            }
+                        // I had to use a vec instead because of partial ordering not being implemented for TraitBound
+                        for blueprint in blueprints.iter_mut() {
+                            blueprint.attatch(&field_info)
                         }
+
                     } else if item_ty.ne(&pat_ty) {
                         self.error.extend(
                             item_field.ty.span(),
@@ -243,6 +201,22 @@ impl Penum<Disassembled> {
                     }
                 }
             }
+
+            // [Generic]
+            //     [Trait]
+            //         [Method]
+            //             [Arm -> dispatch]
+            if let Some(blueprints) = blueprints { blueprints.iter().for_each(|(ident, blueprints)| {
+                println!("{}", ident);
+
+                blueprints.iter().for_each(|blueprint| {
+                    println!("|-{}", blueprint.bound.path.to_token_stream());
+                        blueprint.arms_map.iter().for_each(|arm| {
+                            println!("  |- {}", arm.0);
+                            arm.1.iter().for_each(|ar| println!("     |- {}", ar.to_token_stream()));
+                        })
+                })
+            }) }
 
             // FIXME: Instead of extending the enums where clause with predicate assertion, use spanned_quote
             // Extend our expr where clause with `impl Trait` bounds if found. (predicates)
