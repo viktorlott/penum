@@ -14,13 +14,10 @@ use syn::token::Comma;
 use syn::Type;
 use syn::{parse_quote, spanned::Spanned, Error};
 
-use crate::dispatch::FieldInformation;
-use crate::dispatch::Position;
-use crate::factory::ComparablePats;
-
 use crate::{
-    dispatch::DispatchMap,
+    dispatch::VariantSignature,
     error::Diagnostic,
+    factory::ComparablePats,
     factory::{PenumExpr, Subject, WherePredicate},
     utils::{no_match_found, string, PolymorphicMap},
 };
@@ -36,7 +33,6 @@ pub struct Penum<State = Disassembled> {
     pub subject: Subject,
     pub error: Diagnostic,
     pub types: PolymorphicMap,
-    pub dispatch: DispatchMap,
     _marker: PhantomData<State>,
 }
 
@@ -47,7 +43,6 @@ impl Penum<Disassembled> {
             subject,
             error: Default::default(),
             types: Default::default(),
-            dispatch: Default::default(),
             _marker: Default::default(),
         }
     }
@@ -85,8 +80,8 @@ impl Penum<Disassembled> {
                 //        matches instead of just the first match it finds.
                 //
                 //        # Uni-matcher -> Multi-matcher
-                //        Currently, we can end up returning a pattern that matches in shape, but not 
-                //        in structure, even though another pattern could satisfy our variant. In a case 
+                //        Currently, we can end up returning a pattern that matches in shape, but not
+                //        in structure, even though another pattern could satisfy our variant. In a case
                 //        like the one below, we have a "catch all" variadic.
                 //
                 //        e.g. (i32, ..) | (..) => V1(String, i32), V2(String, String)
@@ -108,7 +103,7 @@ impl Penum<Disassembled> {
                 //        For future reference! This should help with dispach inference.
                 //
                 //        # "catch-all" syntax
-                //        Given the example above, if we were to play with it a little, we could end up with 
+                //        Given the example above, if we were to play with it a little, we could end up with
                 //        something like this:
                 //        `(i32, ..) | _` that translate to `(i32, ..) | (..) | {..}`
                 //
@@ -145,13 +140,15 @@ impl Penum<Disassembled> {
                         //
                         // Should we infer dispatching also?
                         let id = match ty_impl_trait.bounds.first().unwrap() {
-                            syn::TypeParamBound::Trait(t) => t.path.segments.last().unwrap().ident.get_string(),
-                            syn::TypeParamBound::Lifetime(_) => "".to_owned(),
+                            syn::TypeParamBound::Trait(t) => {
+                                t.path.segments.last().unwrap().ident.get_string()
+                            }
+                            syn::TypeParamBound::Lifetime(_) => continue,
                         };
-                        
+
                         // We use a `dummy` identifier to store our bound under.
                         // let tty = ident_impl(ty_impl_trait);
-                        let tty = format_ident!("_IMPL_{}", id);
+                        let tty = format_ident!("_IMPL_{id}");
                         let bounds = &ty_impl_trait.bounds;
 
                         predicates.push(parse_quote!(#tty: #bounds));
@@ -179,20 +176,23 @@ impl Penum<Disassembled> {
                             continue
                         };
 
-                        let position = Position::from(item_field, _index_param);
-                        let field_info = FieldInformation::new(enum_ident, variant_ident, &position, max_fields_len);
+                        let variant_sig = VariantSignature::new(
+                            enum_ident,
+                            variant_ident,
+                            item_field,
+                            max_fields_len,
+                        );
 
                         // FIXME: We are only expecting one dispatch per generic now, so CHANGE THIS WHEN POSSIBLE:
-                        //        - where T: ^Trait, T: ^Mate -> only ^Trait will be found. :(
+                        //        - where T: ^Trait, T: ^Mate -> only ^Trait will be found. :( Fixed?
                         //        - where T: ^Trait + ^Mate   -> should be just turn this into a poly map instead?
                         //
                         // where T: ^Trait + ^Mate, T: ^Fate, T: ^Mate turns into T => [^Trait, ^Mate, ^Fate]
 
                         // I had to use a vec instead because of partial ordering not being implemented for TraitBound
                         for blueprint in blueprints.iter_mut() {
-                            blueprint.attatch(&field_info)
+                            blueprint.attatch(&variant_sig)
                         }
-
                     } else if item_ty.ne(&pat_ty) {
                         self.error.extend(
                             item_field.ty.span(),
@@ -206,17 +206,21 @@ impl Penum<Disassembled> {
             //     [Trait]
             //         [Method]
             //             [Arm -> dispatch]
-            if let Some(blueprints) = blueprints { blueprints.iter().for_each(|(ident, blueprints)| {
-                println!("{}", ident);
+            if let Some(blueprints) = blueprints {
+                for (ident, blueprints) in blueprints.iter() {
+                    println!("{}", ident);
 
-                blueprints.iter().for_each(|blueprint| {
-                    println!("|-{}", blueprint.bound.path.to_token_stream());
-                        blueprint.arms_map.iter().for_each(|arm| {
+                    blueprints.iter().for_each(|blueprint| {
+                        println!("|-{}", blueprint.bound.path.to_token_stream());
+                        blueprint.methods.iter().for_each(|arm| {
                             println!("  |- {}", arm.0);
-                            arm.1.iter().for_each(|ar| println!("     |- {}", ar.to_token_stream()));
+                            arm.1
+                                .iter()
+                                .for_each(|ar| println!("     |- {}", ar.to_token_stream()));
                         })
-                })
-            }) }
+                    })
+                }
+            }
 
             // FIXME: Instead of extending the enums where clause with predicate assertion, use spanned_quote
             // Extend our expr where clause with `impl Trait` bounds if found. (predicates)
