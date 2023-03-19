@@ -11,10 +11,10 @@ use syn::{
     punctuated::Punctuated,
     spanned::Spanned,
     token::{self, Comma},
-    Arm, Binding, Field, FnArg, Pat, Signature, TraitItem, TraitItemMethod, TraitItemType, parse_str, ExprMacro, Macro, parse_quote, Type,
+    Arm, Binding, Field, FnArg, Pat, Signature, TraitItem, TraitItemMethod, TraitItemType, parse_str, ExprMacro, Macro, parse_quote, Type, TypeParam,
 };
 
-use crate::factory::TraitBound;
+use crate::{factory::TraitBound, penum::Stringify};
 
 use standard::{StandardTrait, TraitSchematic};
 
@@ -102,8 +102,9 @@ impl<'a> Position<'a> {
     }
 }
 
-impl<'bound> Blueprint<'bound> {
-    pub fn from(bound: &'bound TraitBound) -> Self {
+
+impl<'bound> From<&'bound TraitBound> for Blueprint<'bound> {
+    fn from(bound: &'bound TraitBound) -> Self {
         let schematic = StandardTrait::from(bound.get_ident()).into();
         Self {
             schematic,
@@ -111,67 +112,101 @@ impl<'bound> Blueprint<'bound> {
             methods: Default::default(),
         }
     }
+}
 
+
+/// FIXME: USE VISITER PATTERN INSTEAD.
+impl<'bound> Blueprint<'bound> {
+
+    
     pub fn get_associated_methods(&self) -> Vec<TraitItemMethod> {
-        let mut meths = vec![];
+        let mut method_items = vec![];
+        let mut polymap = BTreeMap::<String, &Type>::new();
 
-        if let Some(types) = self.get_generics() {
-
-            self.schematic.generics.params.iter().filter_map(|param| match param {
-                syn::GenericParam::Type(ty) => Some(ty.ident.clone()),
-                _ => None
-            }).zip(types).for_each(|(left, right)| {
-                println!("{} - {}", left.to_token_stream(), right.to_token_stream());
-            });
+        if let Some(types) = self.get_bound_generics() {
+            let generics = self.get_schematic_generics();
+            // Generic -> concrete
+            // T       -> str
+            polymap = generics.zip(types).map(|(gen, ty)| (gen.get_string(), ty)).collect::<BTreeMap<_, _>>();
         }
+        // match return_type {
+        //     Type::Array(_) => todo!(),
+        //     Type::BareFn(_) => todo!(),
+        //     Type::Group(_) => todo!(),
+        //     Type::ImplTrait(_) => todo!(),
+        //     Type::Infer(_) => todo!(),
+        //     Type::Macro(_) => todo!(),
+        //     Type::Never(_) => todo!(),
+        //     Type::Paren(_) => todo!(),
+        //     Type::Path(_) => todo!(),
+        //     Type::Ptr(_) => todo!(),
+        //     Type::Reference(_) => todo!(),
+        //     Type::Slice(_) => todo!(),
+        //     Type::TraitObject(_) => todo!(),
+        //     Type::Tuple(_) => todo!(),
+        //     Type::Verbatim(_) => todo!(),
+        //     _ => todo!(),
+        // }
 
-        for method in self.get_methods() {
+        for method in self.get_schematic_methods() {
             if let Some(method_arms) = self.methods.get(&method.sig.ident) {
                 let TraitItemMethod { ref sig, .. } = method;
-                let panic = parse_str::<ExprMacro>("panic!(\"Missing arm\")").unwrap();
 
-                // let output = sig.output;
+                let default_return = if matches!(sig.output, syn::ReturnType::Default) {
+                    quote::quote!(())
+                } else {
+                    // Right now, we always default to a panic. But we could consider other options here too.
+                    // For example, 
+                    //  if we had an Option return type, we could default with `None` instead.
+                    //  if we had an 
+                    parse_str::<ExprMacro>("panic!(\"Missing arm\")").unwrap().to_token_stream()
+                };
 
                 let item: TraitItemMethod = parse_quote!(
                     #sig {
                         match self {
                             #(#method_arms,)*
-                            _ => #panic
+                            _ => #default_return
                         }
                     }
                 );
 
-                meths.push(item);
+                method_items.push(item);
             }
         }
-        meths
+        method_items
     }
 
-    fn get_return(&self) {
-
-    }
-
-    /// Used to zip `get_bindings` and `get_types` together.
+    /// Used to zip `get_bound_bindings` and `get_schematic_types` together.
     ///
     /// ```rust
-    /// struct A where i32: Deref<Target = i32>; // <-- Trait bound
-    /// 
+    /// struct A where i32: Deref<Target = i32>;
+    /// //                        ^^^^^^^^^^^^
+    /// //                        |
+    /// //                        get_bound_bindings()
     /// trait Deref for A {
-    ///     type Target; // <-- Associated type
+    ///     type Target;
+    /// //       ^^^^^^
+    /// //       |
+    /// //       get_schematic_types()
+    /// 
     ///     fn deref(&self) -> &Target;
     /// }
     /// 
-    /// type Target = i32; // <-- mapped associated type
+    /// type Target = i32;
+    /// //   ^^^^^^^^^^^^
+    /// //   |
+    /// //   get_bound_bindings() <> get_schematic_types()
     /// ``
-    pub fn get_associated_types(&self) -> Option<Vec<TraitItemType>> {
-        let Some(bindings) = self.get_bindings() else {
+    pub fn get_mapped_bindings(&self) -> Option<Vec<TraitItemType>> {
+        let Some(bindings) = self.get_bound_bindings() else {
             return None
         };
         
-        let mut assocs = self.get_types().collect::<Vec<_>>();
+        let mut types = self.get_schematic_types().collect::<Vec<_>>();
 
         for binding in bindings {
-            let Some(matc) = assocs.iter_mut().find_map(|assoc| assoc.ident.eq(&binding.ident).then_some(assoc)) else {
+            let Some(matc) = types.iter_mut().find_map(|assoc| assoc.ident.eq(&binding.ident).then_some(assoc)) else {
                 panic!("Missing associated trait bindings")
             };
 
@@ -180,16 +215,19 @@ impl<'bound> Blueprint<'bound> {
             }
         }
 
-        Some(assocs)
+        Some(types)
     }
 
     
     /// Used to extract all bindings in a trait bound
     ///
     /// ```rust
-    /// struct A where i32: Deref<Target = i32>; // <-- Trait bound
+    /// struct A where i32: Deref<Target = i32>; 
+    /// //                        ^^^^^^^^^^^^
+    /// //                        |
+    /// //                        Binding
     /// ``
-    fn get_bindings(&self) -> Option<impl Iterator<Item = &Binding>> {
+    fn get_bound_bindings(&self) -> Option<impl Iterator<Item = &Binding>> {
         let path_segment = self.bound.path.segments.last().unwrap();
         match path_segment.arguments.borrow() {
             syn::PathArguments::AngleBracketed(angle) => {
@@ -202,7 +240,17 @@ impl<'bound> Blueprint<'bound> {
         }
     }
 
-    fn get_generics(&self) -> Option<impl Iterator<Item = &Type>> {
+    /// Used to extract all generics in a trait bound.
+    /// Though, we are more picking out the concrete types
+    /// that substitute the generics.
+    ///
+    /// ```rust
+    /// struct A where i32: AsRef<i32>; // <-- Trait bound
+    /// //                        ^^^
+    /// //                        |
+    /// //                        Concrete type
+    /// ```
+    fn get_bound_generics(&self) -> Option<impl Iterator<Item = &Type>> {
         let path_segment = self.bound.path.segments.last().unwrap();
         match path_segment.arguments.borrow() {
             syn::PathArguments::AngleBracketed(angle) => {
@@ -216,15 +264,36 @@ impl<'bound> Blueprint<'bound> {
     }
 
 
+    /// Used to extract all generic types in a trait
+    ///
+    /// ```rust
+    /// trait AsRef<T> for A {
+    /// //          ^
+    /// //          |
+    /// //          Generic type (Type Param)
+    ///     fn as_ref(&self) -> &T;
+    /// }
+    /// ```
+    fn get_schematic_generics(&self) -> impl Iterator<Item = &TypeParam> {
+        self.schematic.generics.params.iter().filter_map(|param| match param {
+            syn::GenericParam::Type(ty) => Some(ty),
+            _ => None
+        })
+    }
+
+
     /// Used to extract all associated types in a trait
     ///
     /// ```rust
     /// trait Deref for A {
-    ///     type Target; // <-- Associated type
+    ///     type Target; 
+    /// //       ^^^^^^
+    /// //       |
+    /// //       Associated type
     ///     fn deref(&self) -> &Target;
     /// }
     /// ```
-    fn get_types(&self) -> impl Iterator<Item = TraitItemType> + '_ {
+    fn get_schematic_types(&self) -> impl Iterator<Item = TraitItemType> + '_ {
         self.schematic.items.iter().filter_map(|item| match item {
             TraitItem::Type(ty) => Some(ty.clone()),
             _ => None,
@@ -236,10 +305,13 @@ impl<'bound> Blueprint<'bound> {
     /// ```rust
     /// trait Deref for A {
     ///     type Target; 
-    ///     fn deref(&self) -> &Target; // <-- Associated method
+    ///     fn deref(&self) -> &Target;
+    /// //  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    /// //  |
+    /// //  Associated method
     /// }
     /// ```
-    fn get_methods(&self) -> impl Iterator<Item = TraitItemMethod> + '_ {
+    fn get_schematic_methods(&self) -> impl Iterator<Item = TraitItemMethod> + '_ {
         self.schematic.items.iter().filter_map(|item| match item {
             TraitItem::Method(method) => Some(method.clone()),
             _ => None,
