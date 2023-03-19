@@ -217,7 +217,7 @@ impl Penum<Disassembled> {
 
                         let path = blueprint.bound.path.borrow();
                         
-                        if let Some(assocs) = blueprint.get_associated_types() {
+                        if let Some(assocs) = blueprint.get_mapped_bindings() {
                             let methods = blueprint.get_associated_methods();
                             let implementation: ItemImpl = parse_quote!(
                                 impl #path for #enum_ident {
