@@ -1,17 +1,34 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     collections::BTreeMap,
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, Add},
 };
 
-use proc_macro2::{Ident, Span};
-use quote::ToTokens;
+use proc_macro2::{Ident, Span, TokenTree, TokenStream};
+use quote::{ToTokens, format_ident};
 use syn::{
     parse_quote_spanned,
     punctuated::Punctuated,
     spanned::Spanned,
+
+    visit::{
+        Visit, 
+        visit_type_array,
+        visit_type_bare_fn,
+        visit_type_group,
+        visit_type_impl_trait,
+        visit_type_infer,
+        visit_type_macro,
+        visit_type_paren,
+        visit_type_path,
+        visit_type_ptr,
+        visit_type_reference,
+        visit_type_slice,
+        visit_type_trait_object,
+        visit_type_tuple,
+    },
     token::{self, Comma},
-    Arm, Binding, Field, FnArg, Pat, Signature, TraitItem, TraitItemMethod, TraitItemType, parse_str, ExprMacro, Macro, parse_quote, Type, TypeParam,
+    Arm, Binding, Field, FnArg, Pat, Signature, TraitItem, TraitItemMethod, TraitItemType, parse_str, ExprMacro, parse_quote, Type, TypeParam, ReturnType,
 };
 
 use crate::{factory::TraitBound, penum::Stringify};
@@ -19,6 +36,30 @@ use crate::{factory::TraitBound, penum::Stringify};
 use standard::{StandardTrait, TraitSchematic};
 
 mod standard;
+
+struct SomethingStruct<'poly>(&'poly BTreeMap<String, &'poly Type>);
+
+impl<'ast> Visit<'ast> for SomethingStruct<'ast> {
+    fn visit_type_path(&mut self, i: &'ast syn::TypePath) {
+        let ident = i.path.get_ident().get_string();
+
+        if self.0.get(&ident).is_some() {
+            println!("found {}", ident);
+        } 
+
+        if let Some(qself) = i.qself.as_ref() {
+            let ty = qself.ty.get_string();
+            println!("search for -> {}", ty.get_string());
+            if self.0.get(&ty).is_some() {
+                println!("found {}", ty);
+            }
+        }
+
+
+        visit_type_path(self, i);
+    }
+}
+
 
 #[repr(transparent)]
 #[derive(Default)]
@@ -129,25 +170,7 @@ impl<'bound> Blueprint<'bound> {
             // T       -> str
             polymap = generics.zip(types).map(|(gen, ty)| (gen.get_string(), ty)).collect::<BTreeMap<_, _>>();
         }
-        // match return_type {
-        //     Type::Array(_) => todo!(),
-        //     Type::BareFn(_) => todo!(),
-        //     Type::Group(_) => todo!(),
-        //     Type::ImplTrait(_) => todo!(),
-        //     Type::Infer(_) => todo!(),
-        //     Type::Macro(_) => todo!(),
-        //     Type::Never(_) => todo!(),
-        //     Type::Paren(_) => todo!(),
-        //     Type::Path(_) => todo!(),
-        //     Type::Ptr(_) => todo!(),
-        //     Type::Reference(_) => todo!(),
-        //     Type::Slice(_) => todo!(),
-        //     Type::TraitObject(_) => todo!(),
-        //     Type::Tuple(_) => todo!(),
-        //     Type::Verbatim(_) => todo!(),
-        //     _ => todo!(),
-        // }
-
+        
         for method in self.get_schematic_methods() {
             if let Some(method_arms) = self.methods.get(&method.sig.ident) {
                 let TraitItemMethod { ref sig, .. } = method;
@@ -161,6 +184,25 @@ impl<'bound> Blueprint<'bound> {
                     //  if we had an 
                     parse_str::<ExprMacro>("panic!(\"Missing arm\")").unwrap().to_token_stream()
                 };
+
+                let output = sig.output.borrow();
+                // let mut something = SomethingStruct(&polymap);
+
+                // TWO THINGS LEFT.
+                // Format output so that `A<i32>` can be used. This is because of token 
+
+                let formatted_output =output.to_token_stream().into_iter().map(|token| {
+                    if let Some(x) = polymap.get(&token.get_string()) {
+                        TokenTree::Ident(format_ident!("{}", x.get_string()))
+                    } else {
+                        token
+                    }
+                }).collect::<TokenStream>();
+
+                println!("--> {}", m.to_token_stream());
+                // something.visit_return_type(output);
+               
+
 
                 let item: TraitItemMethod = parse_quote!(
                     #sig {

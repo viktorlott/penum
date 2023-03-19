@@ -34,6 +34,7 @@ enum Variadic {
 }
 
 
+
 pub trait MultiMethod {
     fn call_one(&mut self);
     fn call_two(&mut self);
@@ -59,10 +60,10 @@ impl MultiMethod for String {
     }
 }
 
+struct A<T>(T);
 
 
-
-#[penum( (_, _, T, _) | (U, T) | (T) | { n: U, .. } where U: ^Add<i32, Output = i32> + ^MultiMethod, T: ^AsRef<str>, T: ^MultiMethod + ^AsRef<str> )]
+#[penum( (_, _, T, _) | (U, T) | (T) | { n: U, .. } where U: ^Add<i32, Output = i32> + ^MultiMethod, T: ^AsRef<str>, T: ^MultiMethod )]
 enum Foo {
     Bar(i32, String),
     Bar1(i32, i32, String, i32),
