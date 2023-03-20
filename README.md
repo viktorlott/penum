@@ -16,7 +16,7 @@
     </a>
 </div>
 
-`penum` is a procedural macro that is used to make an enum conform to a given pattern, which can include generics with trait bounds. Pattern matching, but for enums!
+`penum` is a procedural macro that is used to make an enum conform to a given pattern, which can include generics with trait bounds. It also allows for static dispatching by expression.
 
 ## Installation
 This crate is available on [crates.io](https://crates.io/crates/penum) and can be used by adding the following to your project's Cargo.toml:
@@ -34,6 +34,8 @@ $ cargo add penum
 - Patterns - `(...) | {...}`
 
 - Generics - `(T, U) | {num: T}`
+
+- Dispatch - `(T) where T: ^AsRef<str>` (limited to std/core traits for now)
   
 - Placeholders - `(_, _) | {num: _}`
   
@@ -43,10 +45,10 @@ $ cargo add penum
   
 - Variadic - `(T, U, ..) | {num: T, ..}`
 
-- Dispatch - `(T) where T: ^AsRef<str>`
   
 ### Use case
-Normally, using a generic in an enum means that it gets applied to the whole enum, and not per variant. For example, if I want to specify that all variants should be a `tuple(T)` where T must implement `Copy`, I'd have to specify a generic for all variants:
+Normally, using a generic in an enum means that it gets applied to the whole enum, and not per variant. 
+For example, if I want to specify that all variants should be a `tuple(T)` where T must implement `Copy`, I'd have to specify a generic for all variants:
 ```rust
 enum Foo where T: Copy, U: Copy, F: Copy {
     Bar(T), 
@@ -229,6 +231,73 @@ enum Must {
 - `VariadicLit` - variadic fields with bounds `(T, U, ..Copy) | {num: T, ..Copy}` 
 - `Discriminants` - support for `#ident(T) = func(#ident)`, or something..
  
+
+### Traits "supported"
+- Any
+- Borrow
+- BorrowMut
+- Eq
+- AsMut
+- AsRef
+- From
+- Into
+- TryFrom
+- TryInto
+- Default
+- Binary
+- Debug
+- Display
+- LowerExp
+- LowerHex
+- Octal
+- Pointer
+- UpperExp
+- UpperHex
+- Future
+- IntoFuture
+- FromIterator
+- FusedIterator
+- IntoIterator
+- Product
+- Sum
+- Copy
+- Sized
+- ToSocketAddrs
+- Add
+- AddAssign
+- BitAnd
+- BitAndAssign
+- BitOr
+- BitOrAssign
+- BitXor
+- BitXorAssign
+- Deref
+- DerefMut
+- Div
+- DivAssign
+- Drop
+- Fn
+- FnMut
+- FnOnce
+- Index
+- IndexMut
+- Mul
+- MulAssign
+- MultiMethod
+- Neg
+- Not
+- Rem
+- RemAssign
+- Shl
+- ShlAssign
+- Shr
+- ShrAssign
+- Sub
+- SubAssign
+- Termination
+- SliceIndex
+- FromStr
+- ToString
 
 <!-- [![Banner](https://raw.githubusercontent.com/viktorlott/penum/main/penum-logo.png)](https://github.com/viktorlott/penum) -->
 <!-- [<img alt="Github" src="https://raw.githubusercontent.com/viktorlott/penum/main/penum-logo.png" height="100">](https://github.com/viktorlott/penum) -->
