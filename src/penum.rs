@@ -252,7 +252,6 @@ impl Penum<Assembled> {
                 let enum_item = self.extend_enum_with(&bound_tokens).to_token_stream();
                 let impl_items = self.impls;
                 let cool = quote::quote!(#enum_item #(#impl_items)*);
-                println!("{}", cool.to_token_stream());
                 cool
             })
             .into()
