@@ -16,7 +16,7 @@
     </a>
 </div>
 
-`penum` is a procedural macro that is used to make an enum conform to a given pattern, which can include generics with trait bounds. It also allows for static dispatching by expression.
+`penum` is a procedural macro that is used to make an enum conform to a given pattern, which can include generics with trait bounds. It also allows for `static dispatching` by expression.
 
 ## Installation
 This crate is available on [crates.io](https://crates.io/crates/penum) and can be used by adding the following to your project's Cargo.toml:
@@ -45,6 +45,8 @@ $ cargo add penum
 
   
 ### Use case
+Be able to express by assertion how an enum should look and behave.
+
 Normally, using a generic in an enum means that it gets applied to the whole enum, and not per variant. 
 For example, if I want to specify that all variants should be a `tuple(T)` where T must implement `Copy`, I'd have to specify a generic for all variants:
 ```rust
@@ -72,6 +74,7 @@ enum Foo {
 }
 ```
 ..which would expand to the first example above, but where T, U and F are replaced with i32, u32 and f32.
+
 
 
 #### Under development
