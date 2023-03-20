@@ -1,65 +1,46 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     collections::BTreeMap,
-    ops::{Deref, DerefMut, Add},
+    ops::{Deref, DerefMut},
 };
 
-use proc_macro2::{Ident, Span, TokenTree, TokenStream};
-use quote::{ToTokens, format_ident};
+use proc_macro2::{Ident, Span};
+use quote::ToTokens;
 use syn::{
-    parse_quote_spanned,
+    parse_quote, parse_quote_spanned, parse_str,
     punctuated::Punctuated,
     spanned::Spanned,
-
-    visit::{
-        Visit, 
-        visit_type_array,
-        visit_type_bare_fn,
-        visit_type_group,
-        visit_type_impl_trait,
-        visit_type_infer,
-        visit_type_macro,
-        visit_type_paren,
-        visit_type_path,
-        visit_type_ptr,
-        visit_type_reference,
-        visit_type_slice,
-        visit_type_trait_object,
-        visit_type_tuple,
-    },
     token::{self, Comma},
-    Arm, Binding, Field, FnArg, Pat, Signature, TraitItem, TraitItemMethod, TraitItemType, parse_str, ExprMacro, parse_quote, Type, TypeParam, ReturnType,
+    Token,
+    visit_mut::{visit_type_mut, visit_angle_bracketed_generic_arguments_mut, VisitMut},
+    Arm, Binding, ExprMacro, Field, FnArg, Pat, Signature, TraitItem, TraitItemMethod,
+    TraitItemType, Type, TypeParam, GenericArgument,
+    TraitBound as SynTraitBound
 };
 
-use crate::{factory::TraitBound, penum::Stringify};
+use crate::factory::TraitBound;
 
 use standard::{StandardTrait, TraitSchematic};
 
 mod standard;
 
-struct SomethingStruct<'poly>(&'poly BTreeMap<String, &'poly Type>);
+/// Only use this for modifying methods trait generics.
+/// Should probably use visit_mut more often..
+///
+/// FIXME:
+///        
+/// ```text
+///   
+///                           Currently no support for method generics...
+/// trait A<T> {              |                  |
+///     fn very_cool_function<U>(&self, a: T, b: U) -> &T;
+/// }                                      |            |
+///                                        We only do substitutions on trait generics.
+///                                        
+/// ```
+struct ModifyFnSignature<'poly>(&'poly BTreeMap<Ident, &'poly Type>);
 
-impl<'ast> Visit<'ast> for SomethingStruct<'ast> {
-    fn visit_type_path(&mut self, i: &'ast syn::TypePath) {
-        let ident = i.path.get_ident().get_string();
-
-        if self.0.get(&ident).is_some() {
-            println!("found {}", ident);
-        } 
-
-        if let Some(qself) = i.qself.as_ref() {
-            let ty = qself.ty.get_string();
-            println!("search for -> {}", ty.get_string());
-            if self.0.get(&ty).is_some() {
-                println!("found {}", ty);
-            }
-        }
-
-
-        visit_type_path(self, i);
-    }
-}
-
+struct RemoveBoundBindings;
 
 #[repr(transparent)]
 #[derive(Default)]
@@ -137,12 +118,11 @@ impl<'a> Position<'a> {
 
     pub fn get_caller(&self) -> Ident {
         match self {
-            Position::Index(_, field) => parse_quote_spanned! { field.span() => val },
-            Position::Key(key) => parse_quote_spanned! { key.span() => #key },
+            Position::Index(_, field) => parse_quote_spanned! {field.span()=> val },
+            Position::Key(key) => parse_quote_spanned! {key.span()=> #key },
         }
     }
 }
-
 
 impl<'bound> From<&'bound TraitBound> for Blueprint<'bound> {
     fn from(bound: &'bound TraitBound) -> Self {
@@ -155,22 +135,21 @@ impl<'bound> From<&'bound TraitBound> for Blueprint<'bound> {
     }
 }
 
-
 /// FIXME: USE VISITER PATTERN INSTEAD.
 impl<'bound> Blueprint<'bound> {
-
-    
+    /// Should probably be using `visit_mut` more often......
     pub fn get_associated_methods(&self) -> Vec<TraitItemMethod> {
         let mut method_items = vec![];
-        let mut polymap = BTreeMap::<String, &Type>::new();
 
-        if let Some(types) = self.get_bound_generics() {
-            let generics = self.get_schematic_generics();
-            // Generic -> concrete
-            // T       -> str
-            polymap = generics.zip(types).map(|(gen, ty)| (gen.get_string(), ty)).collect::<BTreeMap<_, _>>();
-        }
-        
+        // This polymap only contains TRAIT GENERIC PARAM MAPPINGS
+        // e.g. A<i32> 
+        let polymap = self.get_bound_generics().map(|types| {
+            self.get_schematic_generics()
+                .zip(types)
+                .map(|(gen, ty)| (gen.ident.clone(), ty))
+                .collect::<BTreeMap<_, _>>()
+        });
+
         for method in self.get_schematic_methods() {
             if let Some(method_arms) = self.methods.get(&method.sig.ident) {
                 let TraitItemMethod { ref sig, .. } = method;
@@ -178,39 +157,27 @@ impl<'bound> Blueprint<'bound> {
                 let default_return = if matches!(sig.output, syn::ReturnType::Default) {
                     quote::quote!(())
                 } else {
-                    // Right now, we always default to a panic. But we could consider other options here too.
-                    // For example, 
-                    //  if we had an Option return type, we could default with `None` instead.
-                    //  if we had an 
-                    parse_str::<ExprMacro>("panic!(\"Missing arm\")").unwrap().to_token_stream()
+                    // Right now, we always default to a panic. But we could consider 
+                    // other options here too. For example, if we had an Option return 
+                    // type, we could default with `None` instead. 
+                    // Read more /docs/static-dispatch.md
+
+                    // Might be better ways of parsing macros.
+                    parse_str::<ExprMacro>("panic!(\"Missing arm\")")
+                        .unwrap()
+                        .to_token_stream()
                 };
 
-                let output = sig.output.borrow();
-                // let mut something = SomethingStruct(&polymap);
+                let mut signature = sig.clone();
 
-                // TWO THINGS LEFT.
-                // Format output so that `A<i32>` can be used. This is because of token 
-
-                let formatted_output =output.to_token_stream().into_iter().map(|token| {
-                    if let Some(x) = polymap.get(&token.get_string()) {
-                        TokenTree::Ident(format_ident!("{}", x.get_string()))
-                    } else {
-                        token
-                    }
-                }).collect::<TokenStream>();
-
-                println!("--> {}", m.to_token_stream());
-                // something.visit_return_type(output);
-               
+                if let Some(polymap) = polymap.as_ref() {
+                    ModifyFnSignature(polymap).visit_signature_mut(&mut signature)
+                }
 
 
+                // A method item that is ready to be implemented
                 let item: TraitItemMethod = parse_quote!(
-                    #sig {
-                        match self {
-                            #(#method_arms,)*
-                            _ => #default_return
-                        }
-                    }
+                    #signature { match self { #(#method_arms,)* _ => #default_return } }
                 );
 
                 method_items.push(item);
@@ -231,20 +198,20 @@ impl<'bound> Blueprint<'bound> {
     /// //       ^^^^^^
     /// //       |
     /// //       get_schematic_types()
-    /// 
+    ///
     ///     fn deref(&self) -> &Target;
     /// }
-    /// 
+    ///
     /// type Target = i32;
     /// //   ^^^^^^^^^^^^
     /// //   |
     /// //   get_bound_bindings() <> get_schematic_types()
-    /// ``
+    /// ```
     pub fn get_mapped_bindings(&self) -> Option<Vec<TraitItemType>> {
         let Some(bindings) = self.get_bound_bindings() else {
             return None
         };
-        
+
         let mut types = self.get_schematic_types().collect::<Vec<_>>();
 
         for binding in bindings {
@@ -260,11 +227,17 @@ impl<'bound> Blueprint<'bound> {
         Some(types)
     }
 
-    
+    pub fn get_sanatized_impl_path(&self) -> SynTraitBound {
+        let tb = self.bound.clone();
+        let mut tb: SynTraitBound = parse_quote!(#tb);
+        RemoveBoundBindings.visit_trait_bound_mut(&mut tb);
+        tb
+    }
+
     /// Used to extract all bindings in a trait bound
     ///
     /// ```rust
-    /// struct A where i32: Deref<Target = i32>; 
+    /// struct A where i32: Deref<Target = i32>;
     /// //                        ^^^^^^^^^^^^
     /// //                        |
     /// //                        Binding
@@ -305,7 +278,6 @@ impl<'bound> Blueprint<'bound> {
         }
     }
 
-
     /// Used to extract all generic types in a trait
     ///
     /// ```rust
@@ -317,18 +289,21 @@ impl<'bound> Blueprint<'bound> {
     /// }
     /// ```
     fn get_schematic_generics(&self) -> impl Iterator<Item = &TypeParam> {
-        self.schematic.generics.params.iter().filter_map(|param| match param {
-            syn::GenericParam::Type(ty) => Some(ty),
-            _ => None
-        })
+        self.schematic
+            .generics
+            .params
+            .iter()
+            .filter_map(|param| match param {
+                syn::GenericParam::Type(ty) => Some(ty),
+                _ => None,
+            })
     }
-
 
     /// Used to extract all associated types in a trait
     ///
     /// ```rust
     /// trait Deref for A {
-    ///     type Target; 
+    ///     type Target;
     /// //       ^^^^^^
     /// //       |
     /// //       Associated type
@@ -342,11 +317,11 @@ impl<'bound> Blueprint<'bound> {
         })
     }
 
-      /// Used to extract all associated methods in a trait
+    /// Used to extract all associated methods in a trait
     ///
     /// ```rust
     /// trait Deref for A {
-    ///     type Target; 
+    ///     type Target;
     ///     fn deref(&self) -> &Target;
     /// //  ^^^^^^^^^^^^^^^^^^^^^^^^^^
     /// //  |
@@ -381,6 +356,8 @@ impl<'info> VariantSignature<'info> {
         }
     }
 
+    /// To be able to construct a dispatch arm we would need two things, 
+    /// a variant signature and a trait item containing a method ident and inputs.
     pub fn parse_arm(&'info self, method: &'info TraitItemMethod) -> (&Ident, Arm) {
         let Self {
             enum_ident,
@@ -394,12 +371,14 @@ impl<'info> VariantSignature<'info> {
 
         (
             method_ident,
-            parse_quote_spanned! {span.span() => #enum_ident :: #variant_ident #fields => #caller . #method_ident (#sanitized_input)},
+            parse_quote_spanned! {span.span()=> #enum_ident :: #variant_ident #fields => #caller . #method_ident (#sanitized_input)},
         )
     }
 }
 
 impl<'bound> Blueprint<'bound> {
+    /// Fill our blueprint with dispatchable variant arms that we later use to contruct
+    /// an impl statement.
     pub fn attach(&mut self, variant_sig: &VariantSignature) {
         let mut arms: BTreeMap<Ident, Vec<Arm>> = Default::default();
 
@@ -428,6 +407,14 @@ impl<'bound> Blueprint<'bound> {
 }
 
 impl<'a> Position<'a> {
+    /// We use this to format the call signature of the variant.
+    /// It basically picks the value that is being dispatch and excludes
+    /// the rest of the input fields.
+    /// 
+    /// e.g. if we have a variant that contains 4 fields where the second field 
+    /// is to be dispatched, it'd look something like this:  
+    /// - (_, val, ..) => val.<disptch>()
+    /// - { somefield, ..} => somefield.<dispatch>()
     pub fn format_fields_pattern(&self, arity: usize) -> Composite {
         let mut punc = Punctuated::<Param, Comma>::new();
 
@@ -457,6 +444,54 @@ impl<'a> Position<'a> {
                 Composite::Named(punc, token::Brace(key.span()))
             }
         }
+    }
+}
+
+
+impl VisitMut for ModifyFnSignature<'_> {
+    /// Skip mutating generic parameter in method signature
+    fn visit_generics_mut(&mut self, _: &mut syn::Generics) {}
+
+    /// We only care about mutating path types
+    fn visit_type_mut(&mut self, node: &mut syn::Type) {
+        if let Type::Path(typath) = node {
+            // assuming it's always a generic parameter.
+            if let Some(&ty) = typath.path.get_ident().and_then(|ident| self.0.get(ident)) {
+                *node = ty.clone();
+            }
+        }
+        visit_type_mut(self, node);
+    }
+}
+
+impl VisitMut for RemoveBoundBindings {
+    fn visit_angle_bracketed_generic_arguments_mut(&mut self, node: &mut syn::AngleBracketedGenericArguments) {
+        let mut rep_gas: Punctuated<GenericArgument, Token![,]> = Default::default();
+        
+        let mut args = node.args.iter().peekable();
+
+        // Ugh, refactor this 
+        loop {
+            let (Some(gen), s) = (args.next(), args.peek()) else {
+                break
+            };
+
+            if !matches!(gen, GenericArgument::Binding(_)) {
+                rep_gas.push_value(gen.clone());
+
+                if let Some(GenericArgument::Binding(_)) = s {
+                    break;
+                } else {
+                    rep_gas.push_punct(parse_quote!(,));
+                }
+            };
+        }
+
+        if args.count() != 0 {
+            node.args = rep_gas;
+        }
+
+        visit_angle_bracketed_generic_arguments_mut(self, node);
     }
 }
 

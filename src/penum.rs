@@ -29,7 +29,8 @@ pub struct Assembled;
 
 /// Top level container type for Penum.
 ///
-/// It contains everything we need
+/// It contains everything we need to construct our dispatcher
+/// and pattern validator.
 pub struct Penum<State = Disassembled> {
     pub expr: PenumExpr,
     pub subject: Subject,
@@ -70,7 +71,7 @@ impl Penum<Disassembled> {
             // We pre-check for clause because we might be needing this during the dispatch step.
             // Should add `has_dispatchable_member` maybe? let has_clause = self.expr.has_clause();
             // Turn into iterator instead?
-            let mut blueprints = self.expr.get_blueprints();
+            let mut maybe_blueprints = self.expr.get_blueprints();
 
             // Expecting failure like `variant doesn't match shape`, hence pre-calling.
             let pattern_fmt = self.expr.pattern_to_string();
@@ -174,14 +175,14 @@ impl Penum<Disassembled> {
                         self.types.polymap_insert(pat_ty.clone(), item_ty);
 
                         // 3. Dispachable list
-                        let Some(blueprints) = blueprints.as_mut().and_then(|bp| bp.get_mut(&pat_ty)) else {
+                        let Some(blueprints) = maybe_blueprints.as_mut().and_then(|bp| bp.get_mut(&pat_ty)) else {
                             continue
                         };
+
                         // FIXME: We are only expecting one dispatch per generic now, so CHANGE THIS WHEN POSSIBLE:
                         //        where T: ^Trait, T: ^Mate -> only ^Trait will be found. :( Fixed?
                         //        where T: ^Trait + ^Mate   -> should be just turn this into a poly map instead?
                         //
-
                         let variant_sig = VariantSignature::new(
                             enum_ident,
                             variant_ident,
@@ -192,6 +193,7 @@ impl Penum<Disassembled> {
                         for blueprint in blueprints.iter_mut() {
                             blueprint.attach(&variant_sig)
                         }
+
                     } else if item_ty.ne(&pat_ty) {
                         self.error.extend(
                             item_field.ty.span(),
@@ -201,22 +203,11 @@ impl Penum<Disassembled> {
                 }
             }
 
-
-
-            // [Generic]
-            //     [Trait]
-            //         [Method]
-            //             [Arm -> dispatch]
-            if let Some(blueprints) = blueprints {
-                
+            // 
+            if let Some(blueprints) = maybe_blueprints {
                 for (_, blueprints) in blueprints.iter() {
-                    // println!("{}", ident);
-                    
                     for blueprint in blueprints.iter() {
-                        // println!("|-{}", blueprint.bound.path.to_token_stream());
-
-                        let path = blueprint.bound.path.borrow();
-                        
+                        let path = blueprint.get_sanatized_impl_path();
                         if let Some(assocs) = blueprint.get_mapped_bindings() {
                             let methods = blueprint.get_associated_methods();
                             let implementation: ItemImpl = parse_quote!(
