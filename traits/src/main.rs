@@ -1,7 +1,7 @@
 use ::rustfmt::{format_input, Input};
 use regex::Regex;
 use scraper::{Html, Selector};
-use std::fs::{read_to_string, File, write};
+use std::fs::{read_to_string, write, File};
 use std::io::{Sink, Write};
 use std::process::Command;
 
@@ -111,9 +111,10 @@ fn create_traits_from(base: &str) {
             traits.push(fmtd_code.clone());
 
             let file = File::create(format!("../src/dispatch/{}/{}.rs", base, trait_ident));
-            file.unwrap().write_all(&fmtd_code.into_bytes()).expect("write file");
+            file.unwrap()
+                .write_all(&fmtd_code.into_bytes())
+                .expect("write file");
         });
-
 
     let core_enum = format_code(format!("enum Core {{ {} }}", names.join(",")));
 
@@ -138,10 +139,17 @@ fn create_traits_from(base: &str) {
     let file2 = File::create("../src/dispatch/transform.rs");
     let file3 = File::create("../src/dispatch/enum.rs");
 
-    file.unwrap().write_all(&impl_from_enum.into_bytes()).expect("write file");
-    file2.unwrap().write_all(&impl_from_str.into_bytes()).expect("write file");
-    file3.unwrap().write_all(&core_enum.into_bytes()).expect("write file");
-
+    file.unwrap()
+        .write_all(&impl_from_enum.into_bytes())
+        .expect("write file");
+    file2
+        .unwrap()
+        .write_all(&impl_from_str.into_bytes())
+        .expect("write file");
+    file3
+        .unwrap()
+        .write_all(&core_enum.into_bytes())
+        .expect("write file");
 }
 
 fn main() {

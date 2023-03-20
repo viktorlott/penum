@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use proc_macro2::Ident;
 use syn::{
-    punctuated::Punctuated, token, BoundLifetimes, Lifetime, Path, Token, TraitBoundModifier, Type
+    punctuated::Punctuated, token, BoundLifetimes, Lifetime, Path, Token, TraitBoundModifier, Type,
 };
 
 mod parse;
@@ -46,8 +46,6 @@ pub struct TraitBound {
     pub path: Path,
 }
 
-
-
 impl TypeParamBound {
     pub fn get_dispatchable_trait_bound(&self) -> Option<&TraitBound> {
         match self {
@@ -59,11 +57,11 @@ impl TypeParamBound {
 
 impl TraitBound {
     pub fn get_ident(&self) -> &Ident {
-        self
-            .path
+        self.path
             .segments
             .last()
             .expect("dispatchable trait to have a name")
-            .ident.borrow()
+            .ident
+            .borrow()
     }
 }

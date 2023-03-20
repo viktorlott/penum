@@ -11,11 +11,9 @@ use syn::{
     punctuated::Punctuated,
     spanned::Spanned,
     token::{self, Comma},
-    Token,
-    visit_mut::{visit_type_mut, visit_angle_bracketed_generic_arguments_mut, VisitMut},
-    Arm, Binding, ExprMacro, Field, FnArg, Pat, Signature, TraitItem, TraitItemMethod,
-    TraitItemType, Type, TypeParam, GenericArgument,
-    TraitBound as SynTraitBound
+    visit_mut::{visit_angle_bracketed_generic_arguments_mut, visit_type_mut, VisitMut},
+    Arm, Binding, ExprMacro, Field, FnArg, GenericArgument, Pat, Signature, Token,
+    TraitBound as SynTraitBound, TraitItem, TraitItemMethod, TraitItemType, Type, TypeParam,
 };
 
 use crate::factory::TraitBound;
@@ -142,7 +140,7 @@ impl<'bound> Blueprint<'bound> {
         let mut method_items = vec![];
 
         // This polymap only contains TRAIT GENERIC PARAM MAPPINGS
-        // e.g. A<i32> 
+        // e.g. A<i32>
         let polymap = self.get_bound_generics().map(|types| {
             self.get_schematic_generics()
                 .zip(types)
@@ -157,9 +155,9 @@ impl<'bound> Blueprint<'bound> {
                 let default_return = if matches!(sig.output, syn::ReturnType::Default) {
                     quote::quote!(())
                 } else {
-                    // Right now, we always default to a panic. But we could consider 
-                    // other options here too. For example, if we had an Option return 
-                    // type, we could default with `None` instead. 
+                    // Right now, we always default to a panic. But we could consider
+                    // other options here too. For example, if we had an Option return
+                    // type, we could default with `None` instead.
                     // Read more /docs/static-dispatch.md
 
                     // Might be better ways of parsing macros.
@@ -173,7 +171,6 @@ impl<'bound> Blueprint<'bound> {
                 if let Some(polymap) = polymap.as_ref() {
                     ModifyFnSignature(polymap).visit_signature_mut(&mut signature)
                 }
-
 
                 // A method item that is ready to be implemented
                 let item: TraitItemMethod = parse_quote!(
@@ -356,7 +353,7 @@ impl<'info> VariantSignature<'info> {
         }
     }
 
-    /// To be able to construct a dispatch arm we would need two things, 
+    /// To be able to construct a dispatch arm we would need two things,
     /// a variant signature and a trait item containing a method ident and inputs.
     pub fn parse_arm(&'info self, method: &'info TraitItemMethod) -> (&Ident, Arm) {
         let Self {
@@ -410,8 +407,8 @@ impl<'a> Position<'a> {
     /// We use this to format the call signature of the variant.
     /// It basically picks the value that is being dispatch and excludes
     /// the rest of the input fields.
-    /// 
-    /// e.g. if we have a variant that contains 4 fields where the second field 
+    ///
+    /// e.g. if we have a variant that contains 4 fields where the second field
     /// is to be dispatched, it'd look something like this:  
     /// - (_, val, ..) => val.<disptch>()
     /// - { somefield, ..} => somefield.<dispatch>()
@@ -447,7 +444,6 @@ impl<'a> Position<'a> {
     }
 }
 
-
 impl VisitMut for ModifyFnSignature<'_> {
     /// Skip mutating generic parameter in method signature
     fn visit_generics_mut(&mut self, _: &mut syn::Generics) {}
@@ -465,12 +461,15 @@ impl VisitMut for ModifyFnSignature<'_> {
 }
 
 impl VisitMut for RemoveBoundBindings {
-    fn visit_angle_bracketed_generic_arguments_mut(&mut self, node: &mut syn::AngleBracketedGenericArguments) {
+    fn visit_angle_bracketed_generic_arguments_mut(
+        &mut self,
+        node: &mut syn::AngleBracketedGenericArguments,
+    ) {
         let mut rep_gas: Punctuated<GenericArgument, Token![,]> = Default::default();
-        
+
         let mut args = node.args.iter().peekable();
 
-        // Ugh, refactor this 
+        // Ugh, refactor this
         loop {
             let (Some(gen), s) = (args.next(), args.peek()) else {
                 break

@@ -1,6 +1,5 @@
 use std::borrow::Borrow;
 
-use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use proc_macro::TokenStream;
@@ -9,9 +8,9 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::format_ident;
 use quote::ToTokens;
 
-use syn::ItemImpl;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
+use syn::ItemImpl;
 
 use syn::Type;
 use syn::{parse_quote, spanned::Spanned, Error};
@@ -193,7 +192,6 @@ impl Penum<Disassembled> {
                         for blueprint in blueprints.iter_mut() {
                             blueprint.attach(&variant_sig)
                         }
-
                     } else if item_ty.ne(&pat_ty) {
                         self.error.extend(
                             item_field.ty.span(),
@@ -203,7 +201,7 @@ impl Penum<Disassembled> {
                 }
             }
 
-            // 
+            //
             if let Some(blueprints) = maybe_blueprints {
                 for (_, blueprints) in blueprints.iter() {
                     for blueprint in blueprints.iter() {
