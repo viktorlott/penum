@@ -31,19 +31,17 @@ $ cargo add penum
 
 ## Overview
 
-- Patterns - `(...) | {...}`
+- **Patterns** — Create shapes that the enum must conform to. `(...) | {...}`
 
-- Generics - `(T, U) | {num: T}`
+- **Trait bounds** — Use generics in combination with trait bounds to express what your types should implement. `(T, U) where T: Copy, U: Clone`
 
-- Dispatch - `(T) where T: ^AsRef<str>` (limited to std/core traits for now)
+- **Static dispatch** — Express dispatch rules for your types. `(T) where T: ^AsRef<str>` (limited to std/core traits for now)
   
-- Placeholders - `(_, _) | {num: _}`
+- **Placeholders** — Use them as unbounded wildcards. `(_, _) | {num: _}`
   
-- Bounds - `(T, U) where T: Copy, U: Clone`
+- **Impls** — Express trait bounds with impl statements. `(impl Copy, impl Copy) | {name: impl Clone}`
   
-- Impls - `(impl Copy, impl Copy) | {name: impl Clone}`
-  
-- Variadic - `(T, U, ..) | {num: T, ..}`
+- **Variadic** — Similar to placeholders, but variadic. `(T, U, ..) | {num: T, ..}`
 
   
 ### Use case

@@ -69,6 +69,11 @@ enum Foo2 {
     Bar(i32),
 }
 
+#[penum( (impl Add<i32, Output = i32>) )]
+enum Foo3 {
+    Bar(i32),
+}
+
 fn main() {
     match Vector3::Integer(10, 10.0, 10) {
         Vector3::Integer(num, _, _) => num,

@@ -159,6 +159,27 @@ impl Penum<Disassembled> {
                         // If it exists, insert new concrete type.
                         self.types.polymap_insert(tty.to_string(), item_ty);
 
+
+                        // // 3. Dispachable list
+                        // let Some(blueprints) = maybe_blueprints.as_mut().and_then(|bp| bp.get_mut(&tty.get_string())) else {
+                        //     continue
+                        // };
+
+                        // // FIXME: We are only expecting one dispatch per generic now, so CHANGE THIS WHEN POSSIBLE:
+                        // //        where T: ^Trait, T: ^Mate -> only ^Trait will be found. :( Fixed?
+                        // //        where T: ^Trait + ^Mate   -> should be just turn this into a poly map instead?
+                        // //
+                        // let variant_sig = VariantSignature::new(
+                        //     enum_ident,
+                        //     variant_ident,
+                        //     item_field,
+                        //     max_fields_len,
+                        // );
+
+                        // for blueprint in blueprints.iter_mut() {
+                        //     blueprint.attach(&variant_sig)
+                        // }
+
                         continue;
                     }
 
