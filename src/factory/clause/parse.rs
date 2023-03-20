@@ -2,8 +2,8 @@ use syn::{
     parenthesized,
     parse::{Parse, ParseStream, Result},
     punctuated::Punctuated,
-    token, BoundLifetimes, Lifetime, ParenthesizedGenericArguments, Path, PathArguments,
-    Token, TraitBoundModifier,
+    token, BoundLifetimes, Lifetime, ParenthesizedGenericArguments, Path, PathArguments, Token,
+    TraitBoundModifier,
 };
 
 use super::*;

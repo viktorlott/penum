@@ -1,7 +1,7 @@
-use std::{str::FromStr, ops::Deref};
+use std::{ops::Deref, str::FromStr};
 
 use proc_macro2::Ident;
-use syn::{ItemTrait, parse_str};
+use syn::{parse_str, ItemTrait};
 
 #[derive(Debug)]
 pub enum StandardTrait {
@@ -72,13 +72,9 @@ pub enum StandardTrait {
     ToString,
 }
 
-
-
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct TraitSchematic(pub ItemTrait);
-
-
 
 impl From<StandardTrait> for TraitSchematic {
     fn from(value: StandardTrait) -> Self {

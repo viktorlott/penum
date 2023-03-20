@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use penum::{penum};
+use penum::penum;
 use std::ops::Add;
 
 trait Trait {}
@@ -8,7 +8,6 @@ impl Trait for i32 {}
 
 trait Advanced {}
 impl Advanced for usize {}
-
 
 #[penum[(T, T, U) | (T, U) | { name: T } where T: Trait, U: Advanced]]
 enum Vector3 {
@@ -32,8 +31,6 @@ enum Concrete<'a> {
 enum Variadic {
     V1(i32, usize, String, u8, u16),
 }
-
-
 
 pub trait MultiMethod {
     fn call_one(&mut self);
@@ -62,7 +59,6 @@ impl MultiMethod for String {
 
 struct A<T>(T);
 
-
 #[penum( (T) where T: ^AsRef<str> )]
 enum Foo {
     Bar(String),
@@ -73,12 +69,9 @@ enum Foo2 {
     Bar(i32),
 }
 
-
-
 fn main() {
     match Vector3::Integer(10, 10.0, 10) {
         Vector3::Integer(num, _, _) => num,
         Vector3::Float(num, _, _) => num as i32,
     };
-
 }

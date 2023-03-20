@@ -1,21 +1,20 @@
 use syn::{
     punctuated::{Iter, Punctuated},
-    token,
-    ExprRange, Field, Ident, Token,
+    token, ExprRange, Field, Ident, Token,
 };
 
 use quote::ToTokens;
 
-use crate::{penum::Stringify, dispatch::{Blueprints, Blueprint}};
-
-use super::{
-    Comparable, PredicateType, PunctuatedParameters, WhereClause, WherePredicate,
+use crate::{
+    dispatch::{Blueprint, Blueprints},
+    penum::Stringify,
 };
+
+use super::{Comparable, PredicateType, PunctuatedParameters, WhereClause, WherePredicate};
 
 mod boilerplate;
 mod parse;
 mod to_tokens;
-
 
 /// #### A Penum expression consists of one or more patterns, and an optional WhereClause.
 ///
@@ -114,7 +113,9 @@ impl PenumExpr {
             .iter()
             .map(|s| s.to_token_stream().to_string())
             .reduce(|acc, s| {
-                acc.is_empty().then(|| s.clone()).unwrap_or_else(|| format!("{acc} | {s}"))
+                acc.is_empty()
+                    .then(|| s.clone())
+                    .unwrap_or_else(|| format!("{acc} | {s}"))
             })
             .unwrap()
     }
@@ -187,7 +188,6 @@ impl PenumExpr {
         }
     }
 }
-
 
 impl ParameterKind {
     /// This is useful when we just want to check if we should care about

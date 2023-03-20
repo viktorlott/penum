@@ -1,7 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 use proc_macro::TokenStream;
-use syn::{parse_macro_input};
+use syn::parse_macro_input;
 
 use factory::{PenumExpr, Subject};
 use penum::Penum;
@@ -78,7 +78,6 @@ pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
     Penum::from(pattern, input).assemble().unwrap_or_error()
 }
 
-
 // struct F {
 //     ident: Ident,
 //     eq_token: Token![=],
@@ -98,7 +97,6 @@ pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
 //         Ok(Self { ident: input.parse()?, eq_token: input.parse()?, s: input.parse()? })
 //     }
 // }
-
 
 // impl ToTokens for F {
 //     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
@@ -128,7 +126,6 @@ pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
 // #[proc_macro_attribute]
 // pub fn tester(attr: TokenStream, input: TokenStream) -> TokenStream {
 //     let pattern = parse_macro_input!(input as M);
-
 
 //     quote::quote!(#pattern).to_token_stream().into()
 // }
