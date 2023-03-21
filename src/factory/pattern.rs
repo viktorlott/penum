@@ -16,7 +16,7 @@ mod boilerplate;
 mod parse;
 mod to_tokens;
 
-/// #### A Penum expression consists of one or more patterns, and an optional WhereClause.
+/// A Penum expression consists of one or more patterns, and an optional WhereClause.
 ///
 /// ```text
 /// (T) | { name: T }   where T: Clone
@@ -27,11 +27,12 @@ pub struct PenumExpr {
     /// Used for matching against incoming variants
     pub pattern: Vec<PatFrag>,
 
-    /// Contains an optional where clause with one or more where predicates.
+    /// Contains an optional where clause with one or more where
+    /// predicates.
     pub clause: Option<WhereClause>,
 }
 
-/// #### Pattern fragments are used as constituents for the Penum expression composite type.
+/// Pattern fragments are used as constituents for the Penum expression composite type.
 ///
 /// A group can only contain one group type.
 /// ```text
@@ -40,14 +41,16 @@ pub struct PenumExpr {
 ///  <Ident>    <Composite>
 /// ```
 pub struct PatFrag {
-    /// An optional identifier that is currently only used to mark nullary variants.
+    /// An optional identifier that is currently only used to mark
+    /// nullary variants.
     pub ident: Option<Ident>,
 
-    /// A group is a composite of zero or more ParameterKinds surrounded by a delimiter
+    /// A group is a composite of zero or more ParameterKinds surrounded
+    /// by a delimiter
     pub group: Composite,
 }
 
-/// #### A composite can come in 3 flavors:
+/// A composite can come in 3 flavors:
 ///
 /// ```text
 /// { ParameterKind,* } | (ParameterKind,*) | ()
@@ -71,7 +74,7 @@ pub enum Composite {
     Unit,
 }
 
-/// #### A parameter comes in different flavors:
+/// A parameter comes in different flavors:
 ///
 /// ```text
 /// Ident: Type   |   Type     |  ..
@@ -79,17 +82,22 @@ pub enum Composite {
 /// <Field>           <Field>     <Variadic>
 /// ```
 ///
-/// Given that the `Regular(Field)` can also either be `named` or `unnamed`, it's possible to use a
-/// `ParameterKind::Regular->Named` field inside a `GroupKind::Unnamed-Parameters` composite type.
+/// Given that the `Regular(Field)` can also either be `named` or
+/// `unnamed`, it's possible to use a `ParameterKind::Regular->Named`
+/// field inside a `GroupKind::Unnamed-Parameters` composite type.
 pub enum ParameterKind {
-    /// We use this to represent a `normal` field, that is, a field that is either `named` or `unnamed`.
+    /// We use this to represent a `normal` field, that is, a field that
+    /// is either `named` or `unnamed`.
     ///
-    /// This is done by having the `ident` and `colon_token` fields be optional.
+    /// This is done by having the `ident` and `colon_token` fields be
+    /// optional.
     Regular(Field),
 
-    /// We use this to represent that we don't care amount the left over arguments.
+    /// We use this to represent that we don't care amount the left over
+    /// arguments.
     ///
-    /// The use for variadic fields are currently only supported in the last argument position.
+    /// The use for variadic fields are currently only supported in the
+    /// last argument position.
     Variadic(Token![..]),
 
     /// Use `Variadic(Token![..])` instead.
@@ -139,7 +147,8 @@ impl PenumExpr {
     pub fn get_blueprints(&self) -> Option<Blueprints> {
         if self.has_predicates() {
             let mut polymap: Blueprints = Default::default();
-            // SAFETY: We can only have predicates if we have a where clause.
+            // SAFETY: We can only have predicates if we have a where
+            // clause.
             unsafe { self.clause.as_ref().unwrap_unchecked() }
                 .predicates
                 .iter()
@@ -175,7 +184,8 @@ impl PenumExpr {
         f: impl Fn(&PredicateType) -> Option<&PredicateType>,
     ) -> Option<&PredicateType> {
         if self.has_predicates() {
-            // SAFETY: We can only have predicates if we have a where clause.
+            // SAFETY: We can only have predicates if we have a where
+            // clause.
             unsafe { self.clause.as_ref().unwrap_unchecked() }
                 .predicates
                 .iter()
@@ -190,13 +200,14 @@ impl PenumExpr {
 }
 
 impl ParameterKind {
-    /// This is useful when we just want to check if we should care about
-    /// checking the inner structure of ParameterKind.
+    /// This is useful when we just want to check if we should care
+    /// about checking the inner structure of ParameterKind.
     pub fn is_field(&self) -> bool {
         matches!(self, ParameterKind::Regular(_))
     }
 
-    /// Used in ComparablePair method calls to check if a parameter is variadic
+    /// Used in ComparablePair method calls to check if a parameter is
+    /// variadic
     pub fn is_variadic(&self) -> bool {
         matches!(self, ParameterKind::Variadic(_))
     }
@@ -206,8 +217,9 @@ impl ParameterKind {
         matches!(self, ParameterKind::Range(_))
     }
 
-    /// This is basically the same as `is_field` but instead of returning a boolean,
-    /// we return an Option<&Field> if self is a field.
+    /// This is basically the same as `is_field` but instead of
+    /// returning a boolean, we return an Option<&Field> if self is a
+    /// field.
     pub fn get_field(&self) -> Option<&Field> {
         match self {
             ParameterKind::Regular(field) => Some(field),
@@ -229,15 +241,21 @@ impl Composite {
         thread_local! {static EMPTY_SLICE_ITER: Punctuated<ParameterKind, ()> = Punctuated::new();}
 
         match self {
-            // "SAFETY": This is not recommended. The thing is that we are transmuting an empty iter that
-            //           is created from a static Punctuated struct. The lifetime is invariant in Iter<'_>
-            //           which mean that we are not allowed to return another lifetime, even if it outlives 'a.
-            //           It should be "okay" given its static and empty, but I'm not 100% sure if this actually
-            //           can cause UB. Adding to this, it's not currently possible to get here right now because
-            //           of the if statement in `penum::assemble->is_unit()->continue`. So this could also be marked
-            //           as `unreachable`.
+            // "SAFETY": This is not recommended. The thing is that we
+            //           are transmuting an empty iter that is created
+            //           from a static Punctuated struct. The lifetime
+            //           is invariant in Iter<'_> which mean that we are
+            //           not allowed to return another lifetime, even if
+            //           it outlives 'a. It should be "okay" given its
+            //           static and empty, but I'm not 100% sure if this
+            //           actually can cause UB. Adding to this, it's not
+            //           currently possible to get here right now
+            //           because of the if statement in
+            //           `penum::assemble->is_unit()->continue`. So this
+            //           could also be marked as `unreachable`.
             Composite::Unit => EMPTY_SLICE_ITER.with(|f| unsafe { std::mem::transmute(f.iter()) }),
-            // Group::Unit => panic!("Empty Iter is unsupported right now."),
+            // Group::Unit => panic!("Empty Iter is unsupported right
+            // now."),
             Composite::Named { parameters, .. } => parameters.iter(),
             Composite::Unnamed { parameters, .. } => parameters.iter(),
         }
