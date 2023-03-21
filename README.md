@@ -40,7 +40,7 @@ should look and behave through simple expressive rust grammar.
   
 - **Impls** — can be seen as a shorthand for *a concrete type that
   implements this trait*, and are primarily used as a substitute for
-  regular *generic trait bound expressions*. The look something like
+  regular *generic trait bound expressions*. They look something like
   this, `(impl Copy, impl Copy) | {name: impl Clone}`
   
 - **Placeholders** — are single unbounded wildcards, or if you are

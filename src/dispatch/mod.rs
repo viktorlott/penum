@@ -4,7 +4,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::ToTokens;
 use syn::{
     parse_quote, parse_quote_spanned, parse_str,
@@ -22,30 +22,44 @@ use standard::{StandardTrait, TraitSchematic};
 
 mod standard;
 
-/// Only use this for modifying methods trait generics.
-/// Should probably use visit_mut more often..
+/// Only use this for modifying methods trait generics. Should probably
+/// use visit_mut more often..
 ///
-/// FIXME:
-///        
 /// ```text
-///   
 ///                           Currently no support for method generics...
 /// trait A<T> {              |                  |
 ///     fn very_cool_function<U>(&self, a: T, b: U) -> &T;
 /// }                                      |            |
 ///                                        We only do substitutions on trait generics.
+/// ```
+struct MonomorphizeFnSignature<'poly>(&'poly BTreeMap<Ident, &'poly Type>);
+
+///        
+/// ```text
+/// T: Add<T, Output = T>
+/// |      |           |
+/// |      Replace these generics with concrete variant types
+/// |
+/// This one already gets replace during polymophic mapping step.
+/// ```
+struct MonomorphizeTraitBound<'poly>(&'poly BTreeMap<Ident, &'poly Type>);
+
+///        
+/// ```text
+/// where T: Add<i32, Output = i32>
+///                   ^^^^^^^^^^^^
+///                   |
+///                   Remove bindings form trait bound.
 ///                                        
 /// ```
-struct ModifyFnSignature<'poly>(&'poly BTreeMap<Ident, &'poly Type>);
-
 struct RemoveBoundBindings;
 
 #[repr(transparent)]
 #[derive(Default)]
 pub struct Blueprints<'bound>(BTreeMap<String, Vec<Blueprint<'bound>>>);
-// pub type Blueprints<'bound> = Vec<Blueprint<'bound>>;
 
-/// This blueprint contains everything we need to construct an impl statement.
+/// This blueprint contains everything we need to construct an impl
+/// statement.
 ///
 /// The trait bound will contain the actual trait bound (obviously).
 /// ```rust
@@ -59,8 +73,8 @@ pub struct Blueprints<'bound>(BTreeMap<String, Vec<Blueprint<'bound>>>);
 /// }
 /// ```
 ///
-/// The `methods` contains a map of variant arms that is used to dispatch a variant parameter.
-/// For each method:
+/// The `methods` contains a map of variant arms that is used to
+/// dispatch a variant parameter. For each method:
 /// ```rust
 /// Foo::Bar(_, val, ..) => val.as_ref()
 /// ```
@@ -82,8 +96,8 @@ pub struct VariantSignature<'info> {
     span: Span,
 }
 
-/// For each <Dispatchable> -> <{ position, ident, fields }>
-/// Used to know the position of a field.
+/// For each <Dispatchable> -> <{ position, ident, fields }> Used to
+/// know the position of a field.
 pub enum Position<'a> {
     /// The index of the field being dispatched
     Index(usize, &'a Field),
@@ -104,7 +118,8 @@ pub enum Composite {
 }
 
 /// This one is important. Use fields and position to create a pattern.
-/// e.g. ident + position + fields + "bound signature" = `Ident::(_, X, ..) => X.method_call(<args if any>)`
+/// e.g. ident + position + fields + "bound signature" = `Ident::(_, X,
+/// ..) => X.method_call(<args if any>)`
 impl<'a> Position<'a> {
     pub fn from_field(field: &'a Field, fallback: usize) -> Self {
         field
@@ -139,8 +154,8 @@ impl<'bound> Blueprint<'bound> {
     pub fn get_associated_methods(&self) -> Vec<TraitItemMethod> {
         let mut method_items = vec![];
 
-        // This polymap only contains TRAIT GENERIC PARAM MAPPINGS
-        // e.g. A<i32>
+        // This polymap only contains TRAIT GENERIC PARAM MAPPINGS e.g.
+        // A<i32>
         let polymap = self.get_bound_generics().map(|types| {
             self.get_schematic_generics()
                 .zip(types)
@@ -152,25 +167,65 @@ impl<'bound> Blueprint<'bound> {
             if let Some(method_arms) = self.methods.get(&method.sig.ident) {
                 let TraitItemMethod { ref sig, .. } = method;
 
-                let default_return = if matches!(sig.output, syn::ReturnType::Default) {
-                    quote::quote!(())
-                } else {
-                    // Right now, we always default to a panic. But we could consider
-                    // other options here too. For example, if we had an Option return
-                    // type, we could default with `None` instead.
-                    // Read more /docs/static-dispatch.md
-
-                    // Might be better ways of parsing macros.
-                    parse_str::<ExprMacro>("panic!(\"Missing arm\")")
-                        .unwrap()
-                        .to_token_stream()
-                };
-
                 let mut signature = sig.clone();
 
                 if let Some(polymap) = polymap.as_ref() {
-                    ModifyFnSignature(polymap).visit_signature_mut(&mut signature)
+                    MonomorphizeFnSignature(polymap).visit_signature_mut(&mut signature)
                 }
+
+                // Right now, we always default to a panic. But we could
+                // consider other options here too. For example, if we
+                // had an Option return type, we could default with
+                // `None` instead. Read more /docs/static-dispatch.md
+                let default_return = match signature.output.borrow() {
+                    syn::ReturnType::Default => quote::quote!(()),
+                    syn::ReturnType::Type(_, ty) => match &**ty {
+                        // Owned return types without any references:
+                        //
+                        // - Types that can be proven implements Default
+                        //   could be returned with `Default::default()`
+                        //
+                        // - Option<T> could automatically be defaulted
+                        //   to `None`.
+                        //
+                        // - Result<T, U> needs to recursively check `U`
+                        //   to find a defaultable type. If we could
+                        //   prove that `U` implements Default, then we
+                        //   could just `Err(Default::default())`.
+                        Type::Path(_) => return_panic(),
+
+                        // Referenced return types:
+                        //
+                        // - &T where T implements Default doesn't
+                        //   really matter because it's not possible to
+                        //   return `&Default::default()`, even if `T`
+                        //   is a Copy type. `&0` would work, but
+                        //   `&Default::default()` or `&i32::default()`
+                        //   would not.`
+                        //
+                        // - &Option<T> could automatically be defaulted
+                        //   to `&None`.
+                        //
+                        // - &Result<i32, Option<T>> could also be
+                        //   defaulted to &Err(None)
+                        Type::Reference(_) => return_panic(),
+
+                        // Add support for these later.
+                        Type::Array(_) => return_panic(),
+                        Type::BareFn(_) => return_panic(),
+                        Type::Group(_) => return_panic(),
+                        Type::ImplTrait(_) => return_panic(),
+                        Type::Macro(_) => return_panic(),
+                        Type::Paren(_) => return_panic(),
+                        Type::Tuple(_) => return_panic(),
+                        Type::Never(_) => return_panic(),
+                        Type::Ptr(_) => return_panic(),
+
+                        // Some `Type`s can't even be considered as
+                        // valid return types.
+                        _ => return_panic(),
+                    },
+                };
 
                 // A method item that is ready to be implemented
                 let item: TraitItemMethod = parse_quote!(
@@ -183,7 +238,8 @@ impl<'bound> Blueprint<'bound> {
         method_items
     }
 
-    /// Used to zip `get_bound_bindings` and `get_schematic_types` together.
+    /// Used to zip `get_bound_bindings` and `get_schematic_types`
+    /// together.
     ///
     /// ```rust
     /// struct A where i32: Deref<Target = i32>;
@@ -212,7 +268,9 @@ impl<'bound> Blueprint<'bound> {
         let mut types = self.get_schematic_types().collect::<Vec<_>>();
 
         for binding in bindings {
-            let Some(matc) = types.iter_mut().find_map(|assoc| assoc.ident.eq(&binding.ident).then_some(assoc)) else {
+            let Some(matc) = types.iter_mut()
+                .find_map(|assoc| assoc.ident.eq(&binding.ident)
+                .then_some(assoc)) else {
                 panic!("Missing associated trait bindings")
             };
 
@@ -252,9 +310,9 @@ impl<'bound> Blueprint<'bound> {
         }
     }
 
-    /// Used to extract all generics in a trait bound.
-    /// Though, we are more picking out the concrete types
-    /// that substitute the generics.
+    /// Used to extract all generics in a trait bound. Though, we are
+    /// more picking out the concrete types that substitute the
+    /// generics.
     ///
     /// ```rust
     /// struct A where i32: AsRef<i32>; // <-- Trait bound
@@ -354,7 +412,8 @@ impl<'info> VariantSignature<'info> {
     }
 
     /// To be able to construct a dispatch arm we would need two things,
-    /// a variant signature and a trait item containing a method ident and inputs.
+    /// a variant signature and a trait item containing a method ident
+    /// and inputs.
     pub fn parse_arm(&'info self, method: &'info TraitItemMethod) -> (&Ident, Arm) {
         let Self {
             enum_ident,
@@ -374,8 +433,8 @@ impl<'info> VariantSignature<'info> {
 }
 
 impl<'bound> Blueprint<'bound> {
-    /// Fill our blueprint with dispatchable variant arms that we later use to contruct
-    /// an impl statement.
+    /// Fill our blueprint with dispatchable variant arms that we later
+    /// use to contruct an impl statement.
     pub fn attach(&mut self, variant_sig: &VariantSignature) {
         let mut arms: BTreeMap<Ident, Vec<Arm>> = Default::default();
 
@@ -404,12 +463,12 @@ impl<'bound> Blueprint<'bound> {
 }
 
 impl<'a> Position<'a> {
-    /// We use this to format the call signature of the variant.
-    /// It basically picks the value that is being dispatch and excludes
+    /// We use this to format the call signature of the variant. It
+    /// basically picks the value that is being dispatch and excludes
     /// the rest of the input fields.
     ///
-    /// e.g. if we have a variant that contains 4 fields where the second field
-    /// is to be dispatched, it'd look something like this:  
+    /// e.g. if we have a variant that contains 4 fields where the
+    /// second field is to be dispatched, it'd look something like this:  
     /// - (_, val, ..) => val.<disptch>()
     /// - { somefield, ..} => somefield.<dispatch>()
     pub fn format_fields_pattern(&self, arity: usize) -> Composite {
@@ -444,7 +503,23 @@ impl<'a> Position<'a> {
     }
 }
 
-impl VisitMut for ModifyFnSignature<'_> {
+impl VisitMut for MonomorphizeFnSignature<'_> {
+    /// Skip mutating generic parameter in method signature
+    fn visit_generics_mut(&mut self, _: &mut syn::Generics) {}
+
+    /// We only care about mutating path types
+    fn visit_type_mut(&mut self, node: &mut syn::Type) {
+        if let Type::Path(typath) = node {
+            // assuming it's always a generic parameter.
+            if let Some(&ty) = typath.path.get_ident().and_then(|ident| self.0.get(ident)) {
+                *node = ty.clone();
+            }
+        }
+        visit_type_mut(self, node);
+    }
+}
+
+impl VisitMut for MonomorphizeTraitBound<'_> {
     /// Skip mutating generic parameter in method signature
     fn visit_generics_mut(&mut self, _: &mut syn::Generics) {}
 
@@ -517,6 +592,12 @@ impl ToTokens for Param {
     }
 }
 
+impl<'bound> Blueprints<'bound> {
+    pub fn for_each_blueprint(&self, mut f: impl FnMut(&Blueprint)) {
+        self.0.iter().for_each(|m| m.1.iter().for_each(&mut f))
+    }
+}
+
 impl<'bound> Deref for Blueprints<'bound> {
     type Target = BTreeMap<String, Vec<Blueprint<'bound>>>;
 
@@ -550,4 +631,11 @@ fn get_method_parts(method: &TraitItemMethod) -> (&Ident, Punctuated<Pat, Comma>
     let TraitItemMethod { sig, .. } = method;
     let Signature { ident, inputs, .. } = sig;
     (ident, sanitize(inputs))
+}
+
+fn return_panic() -> TokenStream {
+    // Might be better ways of parsing macros.
+    parse_str::<ExprMacro>("panic!(\"Missing arm\")")
+        .unwrap()
+        .to_token_stream()
 }
