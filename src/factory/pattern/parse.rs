@@ -1,7 +1,7 @@
 use syn::{
     braced, parenthesized,
     parse::{Parse, ParseStream},
-    token, Field, Ident, LitInt, Token,
+    token, Field, Ident, LitInt, LitStr, Token,
 };
 
 use crate::utils::parse_pattern;
@@ -10,6 +10,21 @@ use super::{Composite, ParameterKind, PatFrag, PenumExpr};
 
 impl Parse for PenumExpr {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        if input.peek(Ident) && input.peek2(token::Eq) {
+            let _: Ident = input.parse()?;
+            let _: token::Eq = input.parse()?;
+
+            if input.peek(token::Gt) {
+                let _: token::Gt = input.parse()?;
+            }
+        }
+
+        if input.peek(LitStr) {
+            let pat: LitStr = input.parse()?;
+            let penum: PenumExpr = pat.parse_with(PenumExpr::parse)?;
+            return Ok(penum);
+        }
+
         Ok(Self {
             pattern: input.call(parse_pattern)?,
             clause: {

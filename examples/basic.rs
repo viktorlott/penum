@@ -22,7 +22,9 @@ struct A<T>(T);
 
 impl<T> Trait for A<T> {}
 
-#[penum[ (T) where T: Copy]]
+#[penum{
+    pattern = (impl Copy)
+}]
 enum Vector3<'a> {
     Integer(&'a str),
     // Hello (usize, usize)
