@@ -214,7 +214,8 @@ mod tests {
         let ty_string1 = UniqueHashId(&ty1).get_unique_string();
         let ty_string2 = UniqueHashId(&ty2).get_unique_string();
 
-        // If both are OK, then both must be different, making them unique.
+        // If both are OK, then both must be different, making them
+        // unique.
         assert_eq!("__Unique_Id_8289286104171367827", ty_string1);
         assert_eq!("__Unique_Id_2029180714094036370", ty_string2);
     }

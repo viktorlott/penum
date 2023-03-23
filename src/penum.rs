@@ -259,7 +259,6 @@ impl Penum<Disassembled> {
                         // to trait bound.
                         self.types
                             .polymap_insert(item_ty_unique.clone(), item_ty_unique);
-                    // ITEM
                     } else if item_ty_string.eq(&pat_ty_string) {
                         self.types.polymap_insert(
                             pat_ty_unique, // PATTERN
@@ -268,7 +267,7 @@ impl Penum<Disassembled> {
                     } else {
                         self.error.extend(
                             item_field.ty.span(),
-                            format!("Found {item_ty_string} but expected {pat_ty_string}."),
+                            format!("Found `{item_ty_string}` but expected `{pat_ty_string}`."),
                         );
                     }
                 }

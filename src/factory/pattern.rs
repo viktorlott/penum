@@ -147,6 +147,7 @@ impl PenumExpr {
     pub fn get_blueprints(&self) -> Option<Blueprints> {
         if self.has_predicates() {
             let mut polymap: Blueprints = Default::default();
+
             // SAFETY: We can only have predicates if we have a where
             // clause.
             unsafe { self.clause.as_ref().unwrap_unchecked() }
@@ -173,6 +174,7 @@ impl PenumExpr {
                         }
                     }
                 });
+
             (!polymap.is_empty()).then_some(polymap)
         } else {
             None

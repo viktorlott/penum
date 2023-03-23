@@ -22,9 +22,9 @@ struct A<T>(T);
 
 impl<T> Trait for A<T> {}
 
-#[penum[ (usize, ..)]]
+#[penum[ (usize, ..) where String: Advanced]]
 enum Vector3 {
-    Integer(String, f32, usize),
+    Integer(usize, f32, usize),
 }
 
 // #[penum( (_) where i32: Trait ) ]

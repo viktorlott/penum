@@ -12,10 +12,12 @@ mod factory;
 mod penum;
 mod utils;
 
-/// Use this to make an enum conform to a pattern with or without trait bounds.
+/// Use this to make an enum conform to a pattern with or without trait
+/// bounds.
 ///
 /// # Examples
-/// It's also possible to make an enum conform to multiple shapes by seperating a `shape` with `|` symbol, for example:
+/// It's also possible to make an enum conform to multiple shapes by
+/// seperating a `shape` with `|` symbol, for example:
 /// ```rust
 /// #[penum( (T) | (T, T) | { num: T } where T: Copy )]
 /// enum Foo {
@@ -25,8 +27,8 @@ mod utils;
 /// }
 /// ```
 ///
-/// Also, If an enum should break a `pattern`, like if a variant doesn't implement the correct `Trait`,
-/// an error would occur:
+/// Also, If an enum should break a `pattern`, like if a variant doesn't
+/// implement the correct `Trait`, an error would occur:
 /// ```rust
 /// #[penum( (T) | (T, T) | { num: T } where T: Copy )]
 /// enum Foo {
@@ -49,8 +51,9 @@ mod utils;
 ///     Bur { num: f32 }
 /// }
 /// ```
-/// Sometime we don't care about specifying a `where clause` and just want our enum to follow a specific `shape`.
-/// This is done by specifing `_`:
+/// Sometime we don't care about specifying a `where clause` and just
+/// want our enum to follow a specific `shape`. This is done by
+/// specifing `_`:
 /// ```rust
 /// #[penum( (_) | (_, _) | { num: _ } )]
 /// enum Foo {
@@ -73,7 +76,9 @@ pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
     let pattern = parse_macro_input!(attr as PenumExpr);
     let input = parse_macro_input!(input as Subject);
 
-    // Loop through enum definition and match each variant with each shape pattern.
-    // for each variant => pattern.find(variant)
-    Penum::from(pattern, input).assemble().unwrap_or_error()
+    let penum = Penum::from(pattern, input).assemble();
+
+    // Loop through enum definition and match each variant with each
+    // shape pattern. for each variant => pattern.find(variant)
+    penum.unwrap_or_error()
 }
