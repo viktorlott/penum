@@ -1,7 +1,7 @@
 use ::rustfmt::{format_input, Input};
 use regex::Regex;
 use scraper::{Html, Selector};
-use std::fs::{read_to_string, write, File};
+use std::fs::{read_to_string, File};
 use std::io::{Sink, Write};
 use std::process::Command;
 
