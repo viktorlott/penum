@@ -18,7 +18,6 @@ use syn::TraitBound;
 
 use syn::parse_quote;
 use syn::spanned::Spanned;
-use syn::visit::Visit;
 use syn::Error;
 use syn::Type;
 
@@ -36,8 +35,7 @@ use crate::utils::lifetime_not_permitted;
 use crate::utils::maybe_bounds_not_permitted;
 use crate::utils::no_match_found;
 use crate::utils::PolymorphicMap;
-use crate::utils::TypeId;
-use crate::utils::UniqueIdentifier;
+use crate::utils::UniqueHashId;
 
 pub struct Disassembled;
 pub struct Assembled;
@@ -50,7 +48,7 @@ pub struct Penum<State = Disassembled> {
     pub expr: PenumExpr,
     pub subject: Subject,
     pub error: Diagnostic,
-    pub types: PolymorphicMap,
+    pub types: PolymorphicMap<UniqueHashId<Type>, UniqueHashId<Type>>,
     pub impls: Vec<ItemImpl>,
     _marker: PhantomData<State>,
 }
@@ -161,7 +159,10 @@ impl Penum<Disassembled> {
                         break;
                     };
 
+                    // TODO: Refactor into TypeId instead.
                     let item_ty_string = item_field.ty.get_string();
+
+                    let item_ty_unique = UniqueHashId(item_field.ty.clone());
 
                     if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
                         let bounds = &ty_impl_trait.bounds;
@@ -203,29 +204,31 @@ impl Penum<Disassembled> {
                         // polymorphicmap. If it exists, insert new
                         // concrete type.
                         self.types
-                            .polymap_insert(unique_impl_id.borrow(), TypeId::from(&item_field.ty));
+                            .polymap_insert(unique_impl_id.clone().into(), item_ty_unique);
 
                         continue;
                     }
 
-                    let pat_ty = pat_field.ty.get_string();
+                    // NOTE: This string only contains the Ident, so any
+                    // generic parameters will be discarded
+                    let pat_ty_string = pat_field.ty.get_string();
+
+                    let pat_ty_unique = UniqueHashId(pat_field.ty.clone());
+
                     // Check if it's a generic or concrete type
                     // - We only accept `_|[A-Z][A-Z0-9]*` as generics.
-                    let is_generic =
-                        pat_field.ty.is_placeholder() || pat_ty.to_uppercase().eq(&pat_ty);
+                    let is_generic = !pat_field.ty.is_placeholder()
+                        && pat_ty_string.to_uppercase().eq(&pat_ty_string);
 
                     if is_generic {
                         // First we check if pty (T) exists in
                         // polymorphicmap. If it exists, insert new
                         // concrete type.
-
-                        self.types.polymap_insert(
-                            &pat_field.ty.get_ident(),
-                            TypeId::from(&item_field.ty),
-                        );
+                        self.types
+                            .polymap_insert(pat_ty_unique.clone(), item_ty_unique);
 
                         // 3. Dispachable list
-                        let Some(blueprints) = maybe_blueprints.as_mut().and_then(|bp| bp.get_mut(&pat_ty)) else {
+                        let Some(blueprints) = maybe_blueprints.as_mut().and_then(|bp| bp.get_mut(&pat_ty_unique)) else {
                             continue
                         };
 
@@ -246,10 +249,26 @@ impl Penum<Disassembled> {
                         for blueprint in blueprints.iter_mut() {
                             blueprint.attach(&variant_sig)
                         }
-                    } else if item_ty_string.ne(&pat_ty) {
+                        // FIXME: This will only work for nullary type
+                        // constructors.
+                    } else if pat_field.ty.is_placeholder() {
+                        // Because we don't extend the enum where clause
+                        // anymore, we need to save the fields that
+                        // match on placeholder so that we can assert
+                        // predicates on fields that might not implement
+                        // to trait bound.
+                        self.types
+                            .polymap_insert(item_ty_unique.clone(), item_ty_unique);
+                    // ITEM
+                    } else if item_ty_string.eq(&pat_ty_string) {
+                        self.types.polymap_insert(
+                            pat_ty_unique, // PATTERN
+                            item_ty_unique,
+                        );
+                    } else {
                         self.error.extend(
                             item_field.ty.span(),
-                            format!("Found {item_ty_string} but expected {pat_ty}."),
+                            format!("Found {item_ty_string} but expected {pat_ty_string}."),
                         );
                     }
                 }
@@ -310,48 +329,57 @@ impl Penum<Assembled> {
 
                     #(#impl_items)*
                 );
+
                 output
             })
             .into()
     }
 
     fn build_assertions(&mut self) -> (Vec<ItemStruct>, Option<Attribute>) {
-        let mut assertions: Vec<ItemStruct> = Vec::new();
+        let mut assertions: Vec<ItemStruct> = Default::default();
+        let mut documentation: String = Default::default();
 
         if let Some(where_cl) = self.expr.clause.as_ref() {
             for (pred_index, predicate) in where_cl.predicates.iter().enumerate() {
                 match predicate {
                     WherePredicate::Type(pred) => {
-                        if let Some(pty_set) = self.types.get(&pred.bounded_ty.get_ident()) {
+                        if let Some(pty_set) =
+                            self.types.get(&UniqueHashId(pred.bounded_ty.clone()))
+                        {
                             for (index, ty_id) in pty_set.iter().enumerate() {
-                                let bounded_ty = ty_id.get_type();
-                                if let Some(ty) = bounded_ty {
-                                    let assert_ident = get_unique_assertion_statement(
-                                        &self.subject.ident,
-                                        ty,
-                                        pred_index,
-                                        index,
-                                    );
-                                    let spanned_bounds = pred
-                                        .bounds
-                                        .to_token_stream()
-                                        .into_iter()
-                                        .map(|mut token| {
-                                            // This is the only way we
-                                            // can change the span of a
-                                            // `bound`..
-                                            token.set_span(ty.span());
-                                            token
-                                        })
-                                        .collect::<TokenStream2>();
+                                let ty = &**ty_id;
 
-                                    // #[feature(trivial_bounds)]
-                                    // #[rustfmt::skip]
-                                    assertions.push(parse_quote_spanned!(ty.span()=>
-                                        #[allow(non_camel_case_types)]
-                                        struct #assert_ident where #bounded_ty: #spanned_bounds;
-                                    ))
-                                }
+                                let assert_ident = get_unique_assertion_statement(
+                                    &self.subject.ident,
+                                    ty,
+                                    pred_index,
+                                    index,
+                                );
+
+                                let spanned_bounds = pred
+                                    .bounds
+                                    .to_token_stream()
+                                    .into_iter()
+                                    .map(|mut token| {
+                                        // This is the only way we can
+                                        // change the span of a
+                                        // `bound`..
+                                        token.set_span(ty.span());
+                                        token
+                                    })
+                                    .collect::<TokenStream2>();
+
+                                documentation.push_str(&format!(
+                                    "assert!(type {}: {});\n",
+                                    ty.to_token_stream(),
+                                    spanned_bounds.to_token_stream()
+                                ));
+                                // #[feature(trivial_bounds)]
+                                // #[rustfmt::skip]
+                                assertions.push(parse_quote_spanned!(ty.span()=>
+                                    #[allow(non_camel_case_types)]
+                                    struct #assert_ident where #ty: #spanned_bounds;
+                                ))
                             }
                         }
                     }
@@ -362,19 +390,10 @@ impl Penum<Assembled> {
             }
         }
 
-        let doc_attribute = if assertions.is_empty() {
+        let doc_attribute = if documentation.is_empty() {
             None
         } else {
-            let doc_str = format!(
-                include_str!("template/struct_assertion.md"),
-                assertions
-                    .iter()
-                    .map(|x| {
-                        let st = x.get_string();
-                        st.replace("# [allow (non_camel_case_types)]", "\n")
-                    })
-                    .collect::<String>()
-            );
+            let doc_str = format!(include_str!("template/struct_assertion.md"), documentation);
 
             Some(parse_quote!(#[doc = #doc_str]))
         };
@@ -396,7 +415,7 @@ pub trait TraitBoundUtils {
 pub trait TypeUtils {
     fn is_placeholder(&self) -> bool;
     fn some_generic(&self) -> Option<String>;
-    fn get_ident(&self) -> Ident;
+    fn get_generic_ident(&self) -> Ident;
 }
 
 impl<T> Stringify for T where T: ToTokens {}
@@ -416,15 +435,13 @@ impl TypeUtils for Type {
     }
 
     /// Only use this when you are sure it's a generic type.
-    fn get_ident(&self) -> Ident {
+    fn get_generic_ident(&self) -> Ident {
         format_ident!("{}", self.get_string(), span = self.span())
     }
 }
 
 impl TraitBoundUtils for TraitBound {
     fn get_unique_trait_bound_id(&self) -> String {
-        let mut unique = UniqueIdentifier(vec![]);
-        unique.visit_trait_bound(self);
-        unique.0.join("_")
+        UniqueHashId(self).get_unique_string()
     }
 }

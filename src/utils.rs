@@ -1,6 +1,7 @@
 #![allow(unused)]
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet},
+    hash::{Hash, Hasher},
     io::Sink,
     ops::Deref,
 };
@@ -11,58 +12,108 @@ use quote::{format_ident, ToTokens};
 use syn::{
     braced,
     parse::{Parse, ParseStream},
+    parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
     token::{self},
-    visit::{visit_binding, visit_path, Visit},
+    visit::{visit_binding, visit_lifetime, visit_path, visit_type_reference, Visit},
     Token, TraitBound, Type, TypeImplTrait, Variant, WhereClause,
 };
 
 use crate::{factory::PatFrag, penum::Stringify};
 
-#[derive(Clone, Debug)]
-pub struct TypeId(pub Ident, pub Option<Type>);
-
-type GenericIdent = Ident;
 #[derive(Default, Debug)]
-pub struct PolymorphicMap(BTreeMap<GenericIdent, BTreeSet<TypeId>>);
-
-pub struct UniqueIdentifier(pub Vec<String>);
+pub struct PolymorphicMap<K: Hash, V: Hash>(BTreeMap<K, BTreeSet<V>>);
 
 /// Fix these later
-impl PolymorphicMap {
-    /// First we check if pty (T) exists in polymorphicmap.
-    /// If it exists, insert new concrete type.
-    pub fn polymap_insert(&mut self, pty: &Ident, ity: TypeId) {
-        if let Some(set) = self.0.get_mut(pty) {
+impl<K: Hash, V: Hash> PolymorphicMap<UniqueHashId<K>, UniqueHashId<V>>
+where
+    UniqueHashId<K>: Ord,
+    UniqueHashId<V>: Ord,
+{
+    pub fn polymap_insert(&mut self, pty: UniqueHashId<K>, ity: UniqueHashId<V>) {
+        if let Some(set) = self.0.get_mut(&pty) {
             set.insert(ity);
         } else {
-            self.0.insert(pty.clone(), vec![ity].into_iter().collect());
+            self.0.insert(pty, vec![ity].into_iter().collect());
         }
     }
 }
 
-impl<'ast> Visit<'ast> for UniqueIdentifier {
-    fn visit_path(&mut self, node: &'ast syn::Path) {
-        if let Some(item) = node.segments.last() {
-            self.0.push(item.ident.to_string());
-        }
-        visit_path(self, node)
-    }
-
-    fn visit_binding(&mut self, node: &'ast syn::Binding) {
-        self.0.push(node.ident.to_string());
-        visit_binding(self, node);
-    }
-}
-
-impl Deref for PolymorphicMap {
-    type Target = BTreeMap<GenericIdent, BTreeSet<TypeId>>;
+impl<K: Hash, V: Hash> Deref for PolymorphicMap<UniqueHashId<K>, UniqueHashId<V>> {
+    type Target = BTreeMap<UniqueHashId<K>, BTreeSet<UniqueHashId<V>>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
+
+#[derive(Hash, Debug, Clone)]
+pub struct UniqueHashId<T: Hash>(pub T);
+
+impl<T: Hash> UniqueHashId<T> {
+    pub fn get_unique_ident(&self) -> Ident
+    where
+        T: Spanned + ToTokens,
+    {
+        let mut hasher = DefaultHasher::default();
+        self.hash(&mut hasher);
+        format_ident!("__Unique_Id_{}", hasher.finish(), span = self.0.span())
+    }
+
+    pub fn get_unique_string(&self) -> String {
+        let mut hasher = DefaultHasher::default();
+        self.hash(&mut hasher);
+        format!("__Unique_Id_{}", hasher.finish())
+    }
+}
+
+impl From<Ident> for UniqueHashId<Type> {
+    fn from(value: Ident) -> Self {
+        Self(parse_quote!(#value))
+    }
+}
+
+impl<T: ToTokens + Hash + Spanned + Clone> From<&T> for UniqueHashId<T> {
+    fn from(value: &T) -> Self {
+        Self(value.clone())
+    }
+}
+
+impl<T: Hash> Deref for UniqueHashId<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Default for UniqueHashId<Type> {
+    fn default() -> Self {
+        Self(parse_quote!(!))
+    }
+}
+
+impl PartialEq for UniqueHashId<Type> {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_unique_ident() == other.get_unique_ident()
+    }
+}
+
+impl PartialOrd for UniqueHashId<Type> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.get_unique_ident()
+            .partial_cmp(&other.get_unique_ident())
+    }
+}
+
+impl Ord for UniqueHashId<Type> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.get_unique_ident().cmp(&other.get_unique_ident())
+    }
+}
+
+impl Eq for UniqueHashId<Type> {}
 
 pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatFrag>> {
     let mut shape = vec![input.call(parse_pattern_fragment)?];
@@ -101,20 +152,6 @@ pub fn parse_enum(
     Ok((where_clause, brace, variants))
 }
 
-pub fn string<T: ToTokens>(x: &T) -> String {
-    x.to_token_stream().to_string()
-}
-
-#[allow(dead_code)]
-pub fn ident_impl(imptr: &TypeImplTrait) -> Ident {
-    format_ident!(
-        "__IMPL_{}",
-        string(&imptr.bounds)
-            .replace(' ', "_")
-            .replace(['?', '\''], "")
-    )
-}
-
 pub fn no_match_found(item: &impl ToTokens, pat: &str) -> String {
     format!(
         "`{}` doesn't match pattern `{}`",
@@ -138,12 +175,6 @@ pub fn into_unique_ident(value: &str, tag: &Ident, span: Span) -> Ident {
     format_ident!("__IMPL_{}_{}_", tag, value, span = span)
 }
 
-pub fn get_unique_type_string(value: &Type) -> String {
-    let mut unique = UniqueIdentifier(vec![]);
-    unique.visit_type(value);
-    unique.0.join("_")
-}
-
 pub fn get_unique_assertion_statement(
     ident: &Ident,
     ty: &Type,
@@ -153,7 +184,7 @@ pub fn get_unique_assertion_statement(
     format_ident!(
         "__Assert_{}_{}_{}_{}",
         ident,
-        get_unique_type_string(ty),
+        UniqueHashId(ty).get_unique_string(),
         pred_idx,
         idx,
         span = ty.span()
@@ -169,57 +200,22 @@ pub fn format_code(orig: String) -> String {
         .expect("source_code input should be formatted")
 }
 
-impl TypeId {
-    pub fn get_id(&self) -> &Ident {
-        &self.0
-    }
+#[cfg(test)]
+mod tests {
+    use syn::{parse_quote, Type};
 
-    /// If return value is none, then TypeId is used as a key
-    pub fn get_type(&self) -> Option<&Type> {
-        self.1.as_ref()
-    }
+    use crate::utils::UniqueHashId;
 
-    pub fn is_key(&self) -> bool {
-        self.1.is_none()
-    }
-}
+    #[test]
+    fn hash_type() {
+        let ty1: Type = parse_quote!(&'a mut Typer<T, i32, Target = A<i32>>);
+        let ty2: Type = parse_quote!(&'a mut Typer<T, usize, Target = A<i32>>);
 
-impl From<&Type> for TypeId {
-    fn from(value: &Type) -> Self {
-        let mut unique = UniqueIdentifier(vec![]);
-        unique.visit_type(value);
-        Self(format_ident!("{}", unique.0.join("_")), Some(value.clone()))
+        let ty_string1 = UniqueHashId(&ty1).get_unique_string();
+        let ty_string2 = UniqueHashId(&ty2).get_unique_string();
+
+        // If both are OK, then both must be different, making them unique.
+        assert_eq!("__Unique_Id_8289286104171367827", ty_string1);
+        assert_eq!("__Unique_Id_2029180714094036370", ty_string2);
     }
 }
-
-impl From<&Ident> for TypeId {
-    fn from(value: &Ident) -> Self {
-        Self(value.clone(), None)
-    }
-}
-
-impl PartialEq for TypeId {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl PartialOrd for TypeId {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
-    }
-}
-
-impl Ord for TypeId {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.cmp(&other.0)
-    }
-}
-
-impl Eq for TypeId {}
-
-// let ty_span = pred.span();
-// let assert_sync = quote_spanned!{ty_span=>
-//     struct _AssertSync where #pred: Sync;
-// };
-// println!("{}", assert_sync);

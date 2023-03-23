@@ -16,7 +16,7 @@ use syn::{
     TraitBound as SynTraitBound, TraitItem, TraitItemMethod, TraitItemType, Type, TypeParam,
 };
 
-use crate::factory::TraitBound;
+use crate::{factory::TraitBound, utils::UniqueHashId};
 
 use standard::{StandardTrait, TraitSchematic};
 
@@ -56,7 +56,7 @@ struct RemoveBoundBindings;
 
 #[repr(transparent)]
 #[derive(Default)]
-pub struct Blueprints<'bound>(BTreeMap<String, Vec<Blueprint<'bound>>>);
+pub struct Blueprints<'bound>(BTreeMap<UniqueHashId<Type>, Vec<Blueprint<'bound>>>);
 
 /// This blueprint contains everything we need to construct an impl
 /// statement.
@@ -599,7 +599,7 @@ impl<'bound> Blueprints<'bound> {
 }
 
 impl<'bound> Deref for Blueprints<'bound> {
-    type Target = BTreeMap<String, Vec<Blueprint<'bound>>>;
+    type Target = BTreeMap<UniqueHashId<Type>, Vec<Blueprint<'bound>>>;
 
     fn deref(&self) -> &Self::Target {
         self.0.borrow()

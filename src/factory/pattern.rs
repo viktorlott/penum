@@ -7,7 +7,7 @@ use quote::ToTokens;
 
 use crate::{
     dispatch::{Blueprint, Blueprints},
-    penum::Stringify,
+    utils::UniqueHashId,
 };
 
 use super::{Comparable, PredicateType, PunctuatedParameters, WhereClause, WherePredicate};
@@ -164,7 +164,7 @@ impl PenumExpr {
                             return;
                         }
 
-                        let ty = pred_ty.bounded_ty.get_string();
+                        let ty = UniqueHashId(pred_ty.bounded_ty.clone());
 
                         if let Some(entry) = polymap.get_mut(&ty) {
                             entry.append(&mut blueprints)
@@ -254,8 +254,6 @@ impl Composite {
             //           `penum::assemble->is_unit()->continue`. So this
             //           could also be marked as `unreachable`.
             Composite::Unit => EMPTY_SLICE_ITER.with(|f| unsafe { std::mem::transmute(f.iter()) }),
-            // Group::Unit => panic!("Empty Iter is unsupported right
-            // now."),
             Composite::Named { parameters, .. } => parameters.iter(),
             Composite::Unnamed { parameters, .. } => parameters.iter(),
         }

@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+extern crate penum;
 use penum::penum;
 
 trait Trait {}
@@ -21,17 +22,22 @@ struct A<T>(T);
 
 impl<T> Trait for A<T> {}
 
-#[penum[ (T, ..) where T: Trait + Trait2 + Trait3, usize: Trait3]]
+#[penum[ (usize, ..)]]
 enum Vector3 {
-    Integer(i32, f32, usize),
+    Integer(String, f32, usize),
 }
 
-#[penum[{ name: _, age: usize } where usize: Advanced]]
-enum Strategy<'a> {
-    V1 { name: String, age: usize },
-    V2 { name: usize, age: usize },
-    V3 { name: &'a str, age: usize },
-}
+// #[penum( (_) where i32: Trait ) ]
+// enum Must {
+//     V1(i32)
+// }
+
+// #[penum[{ name: _, age: _ } where usize: Advanced]]
+// enum Strategy<'a> {
+//     V1 { name: String, age: usize },
+//     // V2 { name: usize, age: usize },
+//     V3 { name: &'a str, age: usize },
+// }
 
 // #[penum[{ name: &'a str, age: usize }]]
 // enum Concrete<'a> {
