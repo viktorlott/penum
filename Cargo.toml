@@ -23,5 +23,6 @@ doctest = false
 [dependencies]
 proc-macro2 = "1.0.51"
 quote = "1.0.23"
+rustfmt = "0.10.0"
 syn = { version = "1.0.109", features = ["full", "visit", "visit-mut", "extra-traits"] }
 trybuild = "1.0.79"

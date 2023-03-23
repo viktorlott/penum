@@ -1,31 +1,44 @@
 use std::borrow::Borrow;
-
 use std::marker::PhantomData;
 
 use proc_macro::TokenStream;
-
 use proc_macro2::TokenStream as TokenStream2;
+
 use quote::format_ident;
 use quote::ToTokens;
 
 use syn::parse_quote_spanned;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
+use syn::Attribute;
+use syn::Ident;
 use syn::ItemImpl;
+use syn::ItemStruct;
+use syn::TraitBound;
 
+use syn::parse_quote;
+use syn::spanned::Spanned;
+use syn::visit::Visit;
+use syn::Error;
 use syn::Type;
-use syn::{parse_quote, spanned::Spanned, Error};
 
-use crate::utils::get_unique_trait_bound_id;
-use crate::utils::get_unique_type_string;
+use crate::factory::ComparablePats;
+use crate::factory::PenumExpr;
+use crate::factory::Subject;
+use crate::factory::WherePredicate;
+
+use crate::dispatch::VariantSignature;
+use crate::error::Diagnostic;
+
+use crate::utils::format_code;
+use crate::utils::get_unique_assertion_statement;
+use crate::utils::into_unique_ident;
+use crate::utils::lifetime_not_permitted;
+use crate::utils::maybe_bounds_not_permitted;
+use crate::utils::no_match_found;
+use crate::utils::PolymorphicMap;
 use crate::utils::TypeId;
-use crate::{
-    dispatch::VariantSignature,
-    error::Diagnostic,
-    factory::ComparablePats,
-    factory::{PenumExpr, Subject, WherePredicate},
-    utils::{no_match_found, string, PolymorphicMap},
-};
+use crate::utils::UniqueIdentifier;
 
 pub struct Disassembled;
 pub struct Assembled;
@@ -152,27 +165,46 @@ impl Penum<Disassembled> {
                     let item_ty_string = item_field.ty.get_string();
 
                     if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
-                        // FIXME: SUPPORT DISPATCHING FROM `impl Trait`
-                        // expressions. e.g (impl ^Trait) | (_, _)
-                        // Should we infer dispatching also?
-                        let unique_impl_id = match ty_impl_trait.bounds.first().unwrap() {
-                            syn::TypeParamBound::Trait(trait_bound) => {
-                                get_unique_trait_bound_id(trait_bound, variant_ident, 0)
-                            }
-                            syn::TypeParamBound::Lifetime(_) => continue,
-                        };
-
                         let bounds = &ty_impl_trait.bounds;
 
-                        predicates.push(parse_quote! {#unique_impl_id: #bounds});
+                        let mut impl_string = String::new();
+                        for bound in bounds.iter() {
+                            match bound {
+                                syn::TypeParamBound::Trait(trait_bound) => {
+                                    if let syn::TraitBoundModifier::None = trait_bound.modifier {
+                                        impl_string
+                                            .push_str(&trait_bound.get_unique_trait_bound_id())
+                                    } else {
+                                        self.error.extend(
+                                            bound.span(),
+                                            maybe_bounds_not_permitted(trait_bound),
+                                        );
+                                    }
+                                }
+                                syn::TypeParamBound::Lifetime(_) => {
+                                    self.error.extend(bound.span(), lifetime_not_permitted());
+                                }
+                            }
+                        }
+
+                        // No point in continuing if we have errors or
+                        // unique_impl_id is empty
+                        if self.error.has_error() || impl_string.is_empty() {
+                            // Add debug logs
+                            continue;
+                        }
+
+                        // TODO: Add support for impl dispatch
+                        let unique_impl_id =
+                            into_unique_ident(&impl_string, variant_ident, ty_impl_trait.span());
+
+                        predicates.push(parse_quote!(#unique_impl_id: #bounds));
 
                         // First we check if pty (T) exists in
                         // polymorphicmap. If it exists, insert new
                         // concrete type.
-                        self.types.polymap_insert(
-                            unique_impl_id.to_string(),
-                            TypeId::from(&item_field.ty),
-                        );
+                        self.types
+                            .polymap_insert(unique_impl_id.borrow(), TypeId::from(&item_field.ty));
 
                         continue;
                     }
@@ -188,8 +220,10 @@ impl Penum<Disassembled> {
                         // polymorphicmap. If it exists, insert new
                         // concrete type.
 
-                        self.types
-                            .polymap_insert(pat_ty.clone(), TypeId::from(&item_field.ty));
+                        self.types.polymap_insert(
+                            &pat_field.ty.get_ident(),
+                            TypeId::from(&item_field.ty),
+                        );
 
                         // 3. Dispachable list
                         let Some(blueprints) = maybe_blueprints.as_mut().and_then(|bp| bp.get_mut(&pat_ty)) else {
@@ -240,85 +274,83 @@ impl Penum<Disassembled> {
                 });
             }
 
-            // FIXME: Instead of extending the enums where clause with
-            // predicate assertion, use spanned_quote Extend our expr
-            // where clause with `impl Trait` bounds if found.
-            // (predicates)
             let penum_expr_clause = self.expr.clause.get_or_insert_with(|| parse_quote!(where));
 
+            // Might be a little unnecessary to loop through our
+            // predicates again.. But we can refactor later.
             predicates
                 .iter()
                 .for_each(|pred| penum_expr_clause.predicates.push(parse_quote!(#pred)));
-
-            // println!("{}", self.expr.clause.to_token_stream()) Might
-            // be a little unnecessary to loop through our predicates
-            // again.. But we can refactor later.
-            // penum_expr_clause.predicates.iter().filter_map(f)
         } else {
             self.error
                 .extend(variants.span(), "Expected to find at least one variant.");
         }
 
-        // SAFETY: Transmuting Self into Self with a different ZST is
-        // safe.
+        // SAFETY: We are transmuting self into self with a different
+        //         ZST marker that is just there to let us decide what
+        //         methods should be available during different stages.
+        //         So it's safe for us to transmute.
         unsafe { std::mem::transmute(self) }
     }
 }
 
 impl Penum<Assembled> {
     pub fn unwrap_or_error(mut self) -> TokenStream {
-        let assertions = self.build_assertions();
+        let (struct_assertions, assertion_doc) = self.build_assertions();
 
         self.error
             .map(Error::to_compile_error)
             .unwrap_or_else(|| {
                 let enum_item = self.subject;
                 let impl_items = self.impls;
-                let output = quote::quote!(#(#assertions)* #enum_item #(#impl_items)*);
+                let output = quote::quote!(
+                    #(#struct_assertions)*
 
+                    #assertion_doc
+                    #enum_item
+
+                    #(#impl_items)*
+                );
                 output
             })
             .into()
     }
 
-    fn build_assertions(self: &mut Penum<Assembled>) -> Vec<TokenStream2> {
-        let mut assertions: Vec<TokenStream2> = Vec::new();
+    fn build_assertions(&mut self) -> (Vec<ItemStruct>, Option<Attribute>) {
+        let mut assertions: Vec<ItemStruct> = Vec::new();
+
         if let Some(where_cl) = self.expr.clause.as_ref() {
-            where_cl
-                .predicates
-                .iter()
-                .enumerate()
-                .for_each(|(pred_index, predicate)| match predicate {
+            for (pred_index, predicate) in where_cl.predicates.iter().enumerate() {
+                match predicate {
                     WherePredicate::Type(pred) => {
-                        if let Some(pty_set) = self.types.get(&string(&pred.bounded_ty)) {
+                        if let Some(pty_set) = self.types.get(&pred.bounded_ty.get_ident()) {
                             for (index, ty_id) in pty_set.iter().enumerate() {
                                 let bounded_ty = ty_id.get_type();
                                 if let Some(ty) = bounded_ty {
-                                    let assert_ident = format_ident!(
-                                        "__Assert_{}_{}_{}_{}",
-                                        self.subject.ident,
-                                        get_unique_type_string(ty),
+                                    let assert_ident = get_unique_assertion_statement(
+                                        &self.subject.ident,
+                                        ty,
                                         pred_index,
                                         index,
-                                        span = ty.span()
                                     );
-
-                                    let spanned_bound = pred
+                                    let spanned_bounds = pred
                                         .bounds
                                         .to_token_stream()
                                         .into_iter()
                                         .map(|mut token| {
                                             // This is the only way we
-                                            // can change the span of
+                                            // can change the span of a
                                             // `bound`..
                                             token.set_span(ty.span());
                                             token
                                         })
                                         .collect::<TokenStream2>();
 
+                                    // #[feature(trivial_bounds)]
+                                    // #[rustfmt::skip]
                                     assertions.push(parse_quote_spanned!(ty.span()=>
                                         #[allow(non_camel_case_types)]
-                                        struct #assert_ident where #bounded_ty: #spanned_bound;
+                                        struct #assert_ident where #bounded_ty: #spanned_bounds;
                                     ))
                                 }
                             }
@@ -327,10 +359,28 @@ impl Penum<Assembled> {
                     WherePredicate::Lifetime(pred) => self
                         .error
                         .extend(pred.span(), "lifetime predicates are unsupported"),
-                })
+                }
+            }
         }
 
-        assertions
+        let doc_attribute = if assertions.is_empty() {
+            None
+        } else {
+            let doc_str = format!(
+                include_str!("template/struct_assertion.md"),
+                assertions
+                    .iter()
+                    .map(|x| {
+                        let st = x.get_string();
+                        st.replace("# [allow (non_camel_case_types)]", "\n")
+                    })
+                    .collect::<String>()
+            );
+
+            Some(parse_quote!(#[doc = #doc_str]))
+        };
+
+        (assertions, doc_attribute)
     }
 }
 
@@ -340,9 +390,14 @@ pub trait Stringify: ToTokens {
     }
 }
 
+pub trait TraitBoundUtils {
+    fn get_unique_trait_bound_id(&self) -> String;
+}
+
 pub trait TypeUtils {
     fn is_placeholder(&self) -> bool;
     fn some_generic(&self) -> Option<String>;
+    fn get_ident(&self) -> Ident;
 }
 
 impl<T> Stringify for T where T: ToTokens {}
@@ -359,5 +414,18 @@ impl TypeUtils for Type {
                 pat_ty.to_uppercase().eq(&pat_ty).then_some(pat_ty)
             })
             .flatten()
+    }
+
+    /// Only use this when you are sure it's a generic type.
+    fn get_ident(&self) -> Ident {
+        format_ident!("{}", self.get_string(), span = self.span())
+    }
+}
+
+impl TraitBoundUtils for TraitBound {
+    fn get_unique_trait_bound_id(&self) -> String {
+        let mut unique = UniqueIdentifier(vec![]);
+        unique.visit_trait_bound(self);
+        unique.0.join("_")
     }
 }

@@ -1,5 +1,5 @@
-error: `?Trait` bounds are only permitted at the point where a type parameter is declared
+error: `?Sized` bounds are only permitted at the point where a type parameter is declared
  --> tests/ui/impl-opt-out-trait.rs:7:16
   |
 7 | #[penum[ (impl ?Sized) ]]
-  |                ^^^^^^
+  |                ^

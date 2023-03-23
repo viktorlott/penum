@@ -21,4 +21,8 @@ impl Diagnostic {
     {
         self.0.as_ref().map(f)
     }
+
+    pub fn has_error(&self) -> bool {
+        self.0.is_some()
+    }
 }

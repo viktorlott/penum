@@ -1,30 +1,37 @@
 #![allow(dead_code)]
 use penum::penum;
-use std::ops::Add;
 
 trait Trait {}
-impl Trait for f32 {}
+trait Trait2 {}
+trait Trait3 {}
+
 impl Trait for i32 {}
+impl Trait for f32 {}
+
+impl Trait2 for i32 {}
+impl Trait2 for f32 {}
+
+impl Trait3 for i32 {}
+impl Trait3 for f32 {}
 
 trait Advanced {}
-impl Advanced for usize {}
+// impl Advanced for usize {}
 
 struct A<T>(T);
 
-// impl<T> Trait for A<T> {}
+impl<T> Trait for A<T> {}
 
-#[penum[(T, T, U) | (T, U) | { name: T } where T: Trait]]
+#[penum[ (T, ..) where T: Trait + Trait2 + Trait3, usize: Trait3]]
 enum Vector3 {
     Integer(i32, f32, usize),
-    Float(f32, A<i32>, usize),
 }
 
-// #[penum[{ name: _, age: usize } where usize: Advanced]]
-// enum Strategy<'a> {
-//     V1 { name: String, age: usize },
-//     V2 { name: usize, age: usize },
-//     V3 { name: &'a str, age: usize },
-// }
+#[penum[{ name: _, age: usize } where usize: Advanced]]
+enum Strategy<'a> {
+    V1 { name: String, age: usize },
+    V2 { name: usize, age: usize },
+    V3 { name: &'a str, age: usize },
+}
 
 // #[penum[{ name: &'a str, age: usize }]]
 // enum Concrete<'a> {
