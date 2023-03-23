@@ -87,7 +87,7 @@ bounds.*
                       |
                       Dispatch symbol
 ```
-#### Super trivial example:
+### Trivial example:
 - Here he have an enum with two unary tuple variants where the parameter
   type `Struct` implements the trait `Trait`. The goal is to be able to
   call the trait `method` through `Foo`. This can be accomplished
@@ -111,82 +111,94 @@ impl Trait for Foo {
     }
 }
 ```
+<details>
+<summary>*Boilerplate code for the example above*</summary>
 
-*Boilerplate code for aboves examples*
 ```rust
-struct Struct;
-trait Trait {
-    fn method(&self, text: &str);
-}
-impl Trait for Struct {}
+    struct Struct;
+    trait Trait {
+        fn method(&self, text: &str);
+    }
+    impl Trait for Struct {}
 ```
 
+</details>
+
+
 ## Examples
-It's also possible to make an enum conform to multiple shapes by
-seperating a `shape` with `|` symbol, for example:
+Used penum to force every variant to be a tuple with one field that must
+implement `Copy`.
 
 ```rust
-#[penum( (T) | (T, T) | { num: T } where T: Copy )]
-enum Foo {
+#[penum( (T) where T: Copy )]
+enum Guard {
     Bar(String), 
         ^^^^^^
     // ERROR: `String` doesn't implement `Copy`
-    Bor(i32), 
-    Ber(u32, i32), 
-    Bur { num: f32 }
+
+    Bor(&str), 
+        ^^^^
+    // ERROR: `&str` doesn't implement `Copy`
+
+    Bur(Vec<i32>), 
+        ^^^^^^^^
+    // ERROR: `Vec<i32>` doesn't implement `Copy`
+
+    Bir(i32, i32), 
+       ^^^^^^^^^^
+    // ERROR: `(i32, i32)` doesn't match pattern `(T)`
+
+    Byr(), 
+    ^^^^^
+    // ERROR: `Byr()` doesn't match pattern `(T)`
+
+    Bxr { name: usize }, 
+        ^^^^^^^^^^^^^^^
+    // ERROR: `{ nname: usize }` doesn't match pattern `(T)`
+
+    Brr, 
+    ^^^
+    // ERROR: `Brr` doesn't match pattern `(T)`
+
+    Beer(i32) // Works!
 }
 ```
-..or if a variant doesn't match the specified `shape`:
+
 ```rust
-#[penum( (T) | (T, T) | { num: T } where T: Copy )]
-enum Foo {
-    Bar(u32), 
-    Bor(i32), 
-    Ber(u32, i32, i32),
-        ^^^^^^^^^^^^^
-    // Found: `Ber(u32, i32, i32)` 
-    // Expected: `(T) | (T, T) | { num: T }`
-    Bwr(String),
+#[penum( (impl Copy) )]
+enum Guard {
+    Bar(String), 
         ^^^^^^
     // ERROR: `String` doesn't implement `Copy`
-    Bur { num: f32 }
+
+    Bor(&str), 
+        ^^^^
+    // ERROR: `&str` doesn't implement `Copy`
+
+    Bur(Vec<i32>), 
+        ^^^^^^^^
+    // ERROR: `Vec<i32>` doesn't implement `Copy`
+
+    Bir(i32, i32), 
+       ^^^^^^^^^^
+    // ERROR: `(i32, i32)` doesn't match pattern `(T)`
+
+    Byr(), 
+    ^^^^^
+    // ERROR: `Byr()` doesn't match pattern `(T)`
+
+    Bxr { name: usize }, 
+        ^^^^^^^^^^^^^^^
+    // ERROR: `{ nname: usize }` doesn't match pattern `(T)`
+
+    Brr, 
+    ^^^
+    // ERROR: `Brr` doesn't match pattern `(T)`
+
+    Beer(i32) // Works!
 }
 ```
 
-Sometime we don't care about specifying a `where clause` and just want
-our enum to follow a specific `shape`. This is done by specifing `_`:
-```rust
-#[penum( (_) | (_, _) | { num: _ } )]
-enum Foo {
-    Bar(u32), 
-    Bor(i32, f32), 
-    Ber(u32, i32), 
-    Bur { num: f32 }
-}
-```
-
-Other times we only care about the first varaint field implementing a
-trait:
-```rust
-#[penum( (T, ..) | { num: T, .. } where T: Copy )]
-enum Foo {
-    Bar(u32), 
-    Bor(i32, f32), 
-    Ber(u32, i32), 
-    Bur { num: f32 }
-}
-```
-
-..or you could just use `impl` expressions instead.
-```rust
-#[penum( (impl Copy, ..) | { num: f32 } )]
-enum Foo {
-    Bar(u32), 
-    Bor(i32, f32), 
-    Ber(u32, i32), 
-    Bur { num: f32 }
-}
-```
 
 
 #### Under development
@@ -194,138 +206,72 @@ enum Foo {
   more](https://github.com/viktorlott/penum/blob/main/docs/static-dispatch.md)).
 
 
-## Demo
-```rust
-use penum::shape;
-
-trait Trait {}
-impl Trait for f32 {}
-impl Trait for i32 {}
-
-trait Advanced {}
-impl Advanced for usize {}
-
-// `(T, FOO, BAR)` are valid generic parameters, but `(t, Foo, BaR)` are not, 
-// they are considered as **concrete** types. 
-#[penum( (T, T, U) | (T, U) | { name: T } where T: Trait, U: Advanced )]
-enum Vector3 {
-    Integer(i32, f32, usize),
-    Float(f32, i32, usize),
-}
-
-#[penum( { name: _, age: usize } where usize: Advanced )]
-enum Strategy<'a> {
-    V1 { name: String, age: usize },
-    V2 { name: usize, age: usize },
-    V3 { name: &'a str, age: usize },
-}
-
-#[penum( { name: &'a str, age: usize } )]
-enum Concrete<'a> {
-    Static { name: &'a str, age: usize },
-}
-```
-
-```rust
-#[penum( tuple(_) )]
-enum Must<'a> {
-    Static { name: &'a str, age: usize }
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    // Found: `Static { name : & 'a str, age : usize }`
-    // Expected: `tuple(_)`
-}
-// Note that this shape has a name (`tuple`). Right now 
-// it doesn't do anything,but there is an idea of using 
-// regexp to be able to validate on Variant names too.
-
-// Also, there is thoughts about using these Idents to 
-// specify other rules, like if penum should auto implement
-// a static dispatch for a certain pattern. But this could 
-// also be done by other rules.
-
-#[penum( tuple(T) where T: Trait )]
-  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-`the trait bound `usize: Trait` is not satisfied`
-enum Must {
-    Static (usize)
-}
-```
-
 
 
 |   Traits   |   Supported   |
 | ---------- | ------------- |
-|`Any`| :heavy_check_mark: supported |
-|`Borrow`| :heavy_check_mark: supported |
-|`BorrowMut`| :heavy_check_mark: supported |
-|`Eq`| :heavy_check_mark: supported |
-|`AsMut`| :heavy_check_mark: supported |
-|`AsRef`| :heavy_check_mark: supported |
-|`From`| :heavy_check_mark: supported |
-|`Into`| :heavy_check_mark: supported |
-|`TryFrom`| :heavy_check_mark: supported |
-|`TryInto`| :heavy_check_mark: supported |
-|`Default`| :heavy_check_mark: supported |
-|`Binary`| :heavy_check_mark: supported |
-|`Debug`| :heavy_check_mark: supported |
-|`Display`| :heavy_check_mark: supported |
-|`LowerExp`| :heavy_check_mark: supported |
-|`LowerHex`| :heavy_check_mark: supported |
-|`Octal`| :heavy_check_mark: supported |
-|`Pointer`| :heavy_check_mark: supported |
-|`UpperExp`| :heavy_check_mark: supported |
-|`UpperHex`| :heavy_check_mark: supported |
-|`Future`| :heavy_check_mark: supported |
-|`IntoFuture`| :heavy_check_mark: supported |
-|`FromIterator`| :heavy_check_mark: supported |
-|`FusedIterator`| :heavy_check_mark: supported |
-|`IntoIterator`| :heavy_check_mark: supported |
-|`Product`| :heavy_check_mark: supported |
-|`Sum`| :heavy_check_mark: supported |
-|`Copy`| :heavy_check_mark: supported |
-|`Sized`| :heavy_check_mark: supported |
-|`ToSocketAddrs`| :heavy_check_mark: supported |
-|`Add`| :heavy_check_mark: supported |
-|`AddAssign`| :heavy_check_mark: supported |
-|`BitAnd`| :heavy_check_mark: supported |
-|`BitAndAssign`| :heavy_check_mark: supported |
-|`BitOr`| :heavy_check_mark: supported |
-|`BitOrAssign`| :heavy_check_mark: supported |
-|`BitXor`| :heavy_check_mark: supported |
-|`BitXorAssign`| :heavy_check_mark: supported |
-|`Deref`| :heavy_check_mark: supported |
-|`DerefMut`| :heavy_check_mark: supported |
-|`Div`| :heavy_check_mark: supported |
-|`DivAssign`| :heavy_check_mark: supported |
-|`Drop`| :heavy_check_mark: supported |
-|`Fn`| :heavy_check_mark: supported |
-|`FnMut`| :heavy_check_mark: supported |
-|`FnOnce`| :heavy_check_mark: supported |
-|`Index`| :heavy_check_mark: supported |
-|`IndexMut`| :heavy_check_mark: supported |
-|`Mul`| :heavy_check_mark: supported |
-|`MulAssign`| :heavy_check_mark: supported |
-|`MultiMethod`| :heavy_check_mark: supported |
-|`Neg`| :heavy_check_mark: supported |
-|`Not`| :heavy_check_mark: supported |
-|`Rem`| :heavy_check_mark: supported |
-|`RemAssign`| :heavy_check_mark: supported |
-|`Shl`| :heavy_check_mark: supported |
-|`ShlAssign`| :heavy_check_mark: supported |
-|`Shr`| :heavy_check_mark: supported |
-|`ShrAssign`| :heavy_check_mark: supported |
-|`Sub`| :heavy_check_mark: supported |
-|`SubAssign`| :heavy_check_mark: supported |
-|`Termination`| :heavy_check_mark: supported |
-|`SliceIndex`| :heavy_check_mark: supported |
-|`FromStr`| :heavy_check_mark: supported |
-|`ToString`| :heavy_check_mark: supported |
-
-
-#### Unsupported
-- `RangeLit` - variadic fields by range `(T, U, ..4) | {num: T, ..3}` -
-  `VariadicLit` - variadic fields with bounds `(T, U, ..Copy) | {num:
-T, ..Copy}` 
-- `Discriminants` - support for `#ident(T) = func(#ident)`, or
-  something..
- 
+|`Any`| supported |
+|`Borrow`| supported |
+|`BorrowMut`| supported |
+|`Eq`| supported |
+|`AsMut`| supported |
+|`AsRef`| supported |
+|`From`| supported |
+|`Into`| supported |
+|`TryFrom`| supported |
+|`TryInto`| supported |
+|`Default`| supported |
+|`Binary`| supported |
+|`Debug`| supported |
+|`Display`| supported |
+|`LowerExp`| supported |
+|`LowerHex`| supported |
+|`Octal`| supported |
+|`Pointer`| supported |
+|`UpperExp`| supported |
+|`UpperHex`| supported |
+|`Future`| supported |
+|`IntoFuture`| supported |
+|`FromIterator`| supported |
+|`FusedIterator`| supported |
+|`IntoIterator`| supported |
+|`Product`| supported |
+|`Sum`| supported |
+|`Copy`| supported |
+|`Sized`| supported |
+|`ToSocketAddrs`| supported |
+|`Add`| supported |
+|`AddAssign`| supported |
+|`BitAnd`| supported |
+|`BitAndAssign`| supported |
+|`BitOr`| supported |
+|`BitOrAssign`| supported |
+|`BitXor`| supported |
+|`BitXorAssign`| supported |
+|`Deref`| supported |
+|`DerefMut`| supported |
+|`Div`| supported |
+|`DivAssign`| supported |
+|`Drop`| supported |
+|`Fn`| supported |
+|`FnMut`| supported |
+|`FnOnce`| supported |
+|`Index`| supported |
+|`IndexMut`| supported |
+|`Mul`| supported |
+|`MulAssign`| supported |
+|`MultiMethod`| supported |
+|`Neg`| supported |
+|`Not`| supported |
+|`Rem`| supported |
+|`RemAssign`| supported |
+|`Shl`| supported |
+|`ShlAssign`| supported |
+|`Shr`| supported |
+|`ShrAssign`| supported |
+|`Sub`| supported |
+|`SubAssign`| supported |
+|`Termination`| supported |
+|`SliceIndex`| supported |
+|`FromStr`| supported |
+|`ToString`| supported |

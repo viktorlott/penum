@@ -1,12 +1,10 @@
-#![allow(unused)]
+// #![allow(unused)]
 use std::{
     collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet},
     hash::{Hash, Hasher},
-    io::Sink,
     ops::Deref,
 };
 
-use ::rustfmt::{format_input, Input};
 use proc_macro2::{Ident, Span};
 use quote::{format_ident, ToTokens};
 use syn::{
@@ -16,8 +14,7 @@ use syn::{
     punctuated::Punctuated,
     spanned::Spanned,
     token::{self},
-    visit::{visit_binding, visit_lifetime, visit_path, visit_type_reference, Visit},
-    Token, TraitBound, Type, TypeImplTrait, Variant, WhereClause,
+    Token, TraitBound, Type, Variant, WhereClause,
 };
 
 use crate::{factory::PatFrag, penum::Stringify};
@@ -173,31 +170,6 @@ pub fn lifetime_not_permitted() -> &'static str {
 
 pub fn into_unique_ident(value: &str, tag: &Ident, span: Span) -> Ident {
     format_ident!("__IMPL_{}_{}_", tag, value, span = span)
-}
-
-pub fn get_unique_assertion_statement(
-    ident: &Ident,
-    ty: &Type,
-    pred_idx: usize,
-    idx: usize,
-) -> Ident {
-    format_ident!(
-        "__Assert_{}_{}_{}_{}",
-        ident,
-        UniqueHashId(ty).get_unique_string(),
-        pred_idx,
-        idx,
-        span = ty.span()
-    )
-}
-
-pub fn format_code(orig: String) -> String {
-    format_input(Input::Text(orig), &<_>::default(), None::<&mut Sink>)
-        .map(|(_, v, _)| v.into_iter().next())
-        .ok()
-        .flatten()
-        .map(|(_, m)| m.to_string())
-        .expect("source_code input should be formatted")
 }
 
 #[cfg(test)]

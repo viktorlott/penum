@@ -7,13 +7,10 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::format_ident;
 use quote::ToTokens;
 
-use syn::parse_quote_spanned;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
-use syn::Attribute;
 use syn::Ident;
 use syn::ItemImpl;
-use syn::ItemStruct;
 use syn::TraitBound;
 
 use syn::parse_quote;
@@ -29,7 +26,6 @@ use crate::factory::WherePredicate;
 use crate::dispatch::VariantSignature;
 use crate::error::Diagnostic;
 
-use crate::utils::get_unique_assertion_statement;
 use crate::utils::into_unique_ident;
 use crate::utils::lifetime_not_permitted;
 use crate::utils::maybe_bounds_not_permitted;
@@ -137,7 +133,11 @@ impl Penum<Disassembled> {
 
                 // 1. Check if we match in `shape`
                 let Some(matched_pair) = comparable_pats.compare(&comp_item) else {
-                    self.error.extend(comp_item.value.span(), no_match_found(comp_item.value, &pattern_fmt));
+                    if comp_item.value.is_empty() {
+                        self.error.extend(variant_ident.span(), no_match_found(variant_ident, &pattern_fmt));
+                    } else {
+                        self.error.extend(comp_item.value.span(), no_match_found(comp_item.value, &pattern_fmt));
+                    };
                     continue
                 };
 
@@ -313,47 +313,29 @@ impl Penum<Disassembled> {
 
 impl Penum<Assembled> {
     pub fn unwrap_or_error(mut self) -> TokenStream {
-        let (struct_assertions, assertion_doc) = self.build_assertions();
+        self.build_assertions();
 
         self.error
             .map(Error::to_compile_error)
             .unwrap_or_else(|| {
                 let enum_item = self.subject;
                 let impl_items = self.impls;
-                let output = quote::quote!(
-                    #(#struct_assertions)*
-
-                    #assertion_doc
-                    #enum_item
-
-                    #(#impl_items)*
-                );
-
+                let output = quote::quote!(#enum_item #(#impl_items)*);
                 output
             })
             .into()
     }
 
-    fn build_assertions(&mut self) -> (Vec<ItemStruct>, Option<Attribute>) {
-        let mut assertions: Vec<ItemStruct> = Default::default();
-        let mut documentation: String = Default::default();
-
+    fn build_assertions(&mut self) {
         if let Some(where_cl) = self.expr.clause.as_ref() {
-            for (pred_index, predicate) in where_cl.predicates.iter().enumerate() {
+            for (_, predicate) in where_cl.predicates.iter().enumerate() {
                 match predicate {
                     WherePredicate::Type(pred) => {
                         if let Some(pty_set) =
                             self.types.get(&UniqueHashId(pred.bounded_ty.clone()))
                         {
-                            for (index, ty_id) in pty_set.iter().enumerate() {
+                            for (_, ty_id) in pty_set.iter().enumerate() {
                                 let ty = &**ty_id;
-
-                                let assert_ident = get_unique_assertion_statement(
-                                    &self.subject.ident,
-                                    ty,
-                                    pred_index,
-                                    index,
-                                );
 
                                 let spanned_bounds = pred
                                     .bounds
@@ -368,17 +350,11 @@ impl Penum<Assembled> {
                                     })
                                     .collect::<TokenStream2>();
 
-                                documentation.push_str(&format!(
-                                    "assert!(type {}: {});\n",
-                                    ty.to_token_stream(),
-                                    spanned_bounds.to_token_stream()
-                                ));
-                                // #[feature(trivial_bounds)]
-                                // #[rustfmt::skip]
-                                assertions.push(parse_quote_spanned!(ty.span()=>
-                                    #[allow(non_camel_case_types)]
-                                    struct #assert_ident where #ty: #spanned_bounds;
-                                ))
+                                self.subject
+                                    .generics
+                                    .make_where_clause()
+                                    .predicates
+                                    .push(parse_quote! {#ty: #spanned_bounds})
                             }
                         }
                     }
@@ -388,16 +364,6 @@ impl Penum<Assembled> {
                 }
             }
         }
-
-        let doc_attribute = if documentation.is_empty() {
-            None
-        } else {
-            let doc_str = format!(include_str!("template/struct_assertion.md"), documentation);
-
-            Some(parse_quote!(#[doc = #doc_str]))
-        };
-
-        (assertions, doc_attribute)
     }
 }
 
