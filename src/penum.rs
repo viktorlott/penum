@@ -30,7 +30,6 @@ use crate::factory::WherePredicate;
 use crate::dispatch::VariantSignature;
 use crate::error::Diagnostic;
 
-use crate::utils::format_code;
 use crate::utils::get_unique_assertion_statement;
 use crate::utils::into_unique_ident;
 use crate::utils::lifetime_not_permitted;
