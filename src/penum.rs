@@ -313,7 +313,7 @@ impl Penum<Disassembled> {
 
 impl Penum<Assembled> {
     pub fn unwrap_or_error(mut self) -> TokenStream {
-        self.build_assertions();
+        self.attach_assertions();
 
         self.error
             .map(Error::to_compile_error)
@@ -326,7 +326,7 @@ impl Penum<Assembled> {
             .into()
     }
 
-    fn build_assertions(&mut self) {
+    fn attach_assertions(&mut self) {
         if let Some(where_cl) = self.expr.clause.as_ref() {
             for (_, predicate) in where_cl.predicates.iter().enumerate() {
                 match predicate {
