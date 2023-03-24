@@ -33,10 +33,12 @@ enum Foo {
     Bar(String),
 }
 
-#[penum( unit | (T) where T: ^AbcTrait )]
+#[penum( unit | (T, ..) | () where T: ^AbcTrait )]
 enum Foo1 {
+    Ber(String),
     Bar(String),
-    Bor
+    Bor,
+    Bur()
 }
 
 #[penum((T) where T:  ^Add<i32, Output = i32>)]
@@ -53,6 +55,7 @@ fn main() {
     assert_eq!(Some(10), foot1.a());
     assert_eq!(&Some(20), foot1.b());
     assert_eq!((Some(30), &None), foot1.c());
+    assert_eq!(foot1.d(), foot1.d());
 
 
     let foot2 = Foo2::Bar(100);

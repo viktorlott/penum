@@ -31,12 +31,14 @@ should look and behave through simple expressive rust grammar.
   can be expressed like this, `where T: Trait<Type>`. The *generic
   parameters* actually needs to be introduced inside a pattern fragment. 
 
-- **Static dispatch** — lets us express how an enum should behave in
+- **Smart dispatch** — lets us express how an enum should behave in
   respect to its variants. The symbol that is used to express this is
   `^` and should be put infront of the trait you wish to be dispatched,
   e.g. `(T) where T: ^AsRef<str>`. This is currently limited to rust std
   and core library traits, but there's plans to extend support for
-  custom trait definitions soon.
+  custom trait definitions soon. Methods with `Option`, `String`, and
+  other `Default` return types will be automatically returned for
+  variants that doesn't have a field satifying the dispatch trait
   
 - **Impls** — can be seen as a shorthand for *a concrete type that
   implements this trait*, and are primarily used as a substitute for
@@ -69,45 +71,55 @@ Or run this command in your cargo project:
 $ cargo add penum
 ```
 ## Overview 
-- A `Penum` expression can look like this:
+A `Penum` expression can look like this:
 ```text
 #[penum( (T) where T: Trait )]
          ^^^       ^^^^^^^^
          |         |
-         |         Predicate bound.
+         |         Predicate bound
          |
          Pattern fragment.
 ```
 *note that there can be multiple patterns fragments and predicate
 bounds.*
 
-- Here's how it would look like if we wanted to dispatch a trait.
+Here's how it would look like if we wanted to dispatch a trait.
 ```text
 #[penum( (T) where T: ^Trait )]
                       |
                       Dispatch symbol
 ```
+`Penum` is smart enough to infer certain return types for non-matching
+variants. e.g `Option<T>`, `&Option<T>`, `String`, `&str`. It can even
+handle `&String`, referenced non-const types. The goal is to support any
+type that implemented `Default`.
+
+Note, when dispatching traits with associated types, it's important to
+declare them. e.g `Add<i32, Output = i32>`.
+
 ### Trivial example:
-- Here we have an enum with one unary and one binary tuple variant where
-  the field type `Storage` and `Something` implements the trait `Trait`.
-  The goal is to be able to call the trait `method` through `Foo`. This
-  can be accomplished automatically marking the trait with a dispatch
-  symbol `^`.
+Here we have an enum with one unary and one binary tuple variant where
+the field type `Storage` and `Something` implements the trait `Trait`.
+The goal is to be able to call the trait `method` through `Foo`. This
+can be accomplished automatically marking the trait with a dispatch
+symbol `^`.
 ```rust
-#[penum{ (T) | (_, T) where T: ^Trait }]
+#[penum{ unit | (T) | (_, T) where T: ^Trait }]
 enum Foo {
     V1(Storage), 
     V2(i32, Something), 
+    V3
 }
 ```
 
 - Will turn into this:
 ```rust
 impl Trait for Foo {
-    fn method(&self, text: &str) {
+    fn method(&self, text: &str) -> &Option<&str> {
         match self {
             V1(val) => val.method(text),
             V2(_, val) => val.method(text),
+            _ => &None
         }
     }
 }
@@ -119,7 +131,7 @@ impl Trait for Foo {
     struct Storage;
     struct Something;
     trait Trait {
-        fn method(&self, text: &str);
+        fn method(&self, text: &str) -> &Option<&str>;
     }
     impl Trait for Storage {}
     impl Trait for Something {}
@@ -166,43 +178,6 @@ enum Guard {
     Beer(i32) // Works!
 }
 ```
-
-```rust
-#[penum( (impl Copy) )]
-enum Guard {
-    Bar(String), 
-        ^^^^^^
-    // ERROR: `String` doesn't implement `Copy`
-
-    Bor(Option<&str>), 
-        ^^^^^^^^^^^^
-    // ERROR: `Option<&str>` doesn't implement `Copy`
-
-    Bur(Vec<i32>), 
-        ^^^^^^^^
-    // ERROR: `Vec<i32>` doesn't implement `Copy`
-
-    Bir(i32, i32), 
-       ^^^^^^^^^^
-    // ERROR: `(i32, i32)` doesn't match pattern `(T)`
-
-    Byr(), 
-    ^^^^^
-    // ERROR: `Byr()` doesn't match pattern `(T)`
-
-    Bxr { name: usize }, 
-        ^^^^^^^^^^^^^^^
-    // ERROR: `{ nname: usize }` doesn't match pattern `(T)`
-
-    Brr, 
-    ^^^
-    // ERROR: `Brr` doesn't match pattern `(T)`
-
-    Beer(i32) // Works!
-}
-```
-
-
 
 #### Under development
 - `Static dispatch` - auto implement `core`/`std`/`custom` traits ([read
