@@ -174,8 +174,8 @@ impl Penum<Disassembled> {
                                         impl_string
                                             .push_str(&trait_bound.get_unique_trait_bound_id())
                                     } else {
-                                        self.error.extend_spanned(
-                                            bound,
+                                        self.error.extend(
+                                            bound.span(),
                                             maybe_bounds_not_permitted(trait_bound),
                                         );
                                     }
@@ -303,8 +303,10 @@ impl Penum<Disassembled> {
                 .iter()
                 .for_each(|pred| penum_expr_clause.predicates.push(parse_quote!(#pred)));
         } else {
-            self.error
-                .extend(variants.span(), "Expected to find at least one variant.");
+            self.error.extend(
+                self.subject.ident.span(),
+                "Expected to find at least one variant.",
+            );
         }
 
         // SAFETY: We are transmuting self into self with a different

@@ -180,6 +180,12 @@ impl<'bound> Blueprint<'bound> {
                 // consider other options here too. For example, if we
                 // had an Option return type, we could default with
                 // `None` instead. Read more /docs/static-dispatch.md
+
+                // We should look for Default implementations on the
+                // return type. Through, a `-> &T` where `T: Default`.
+                // It's not possible to do `&Default::default()` or
+                // `&T::default()` IIRC. A &T where T isn't owned by
+                // self needs to be ZST to be able to be returned.
                 let default_return = match signature.output.borrow() {
                     syn::ReturnType::Default => quote::quote!(()),
                     syn::ReturnType::Type(_, ty) => {
@@ -592,3 +598,22 @@ fn get_method_parts(method: &TraitItemMethod) -> (&Ident, Punctuated<Pat, Comma>
     let Signature { ident, inputs, .. } = sig;
     (ident, sanitize(inputs))
 }
+
+// enum Opt<T> {
+//     Some(T),
+//     None
+// }
+// struct Abc(String);
+
+// impl Abc {
+
+//     fn a(&self) -> &Opt<i32> {
+//         &Opt::None
+//     }
+//     fn b(&self) -> &Result<i32, ()> {
+//         &Err(())
+//     }
+//     fn c(&self) -> &Result<i32, ()> {
+//         &Err(())
+//     }
+// }
