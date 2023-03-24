@@ -1,10 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use syn::{
-    parse_str,
-    ExprMacro, Type
-};
-
+use syn::{parse_str, ExprMacro, Type};
 
 // We could use Visit pattern here, but it was easier to do it like this.
 pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
@@ -60,7 +56,6 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
                 break;
             }
 
-
             Type::Tuple(tuple) => {
                 let len = tuple.elems.len();
 
@@ -100,7 +95,6 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
     }
 }
 
-
 pub fn return_panic() -> TokenStream {
     // Might be better ways of parsing macros.
     parse_str::<ExprMacro>("panic!(\"Missing arm\")")
@@ -108,14 +102,13 @@ pub fn return_panic() -> TokenStream {
         .to_token_stream()
 }
 
-
 #[cfg(test)]
 mod tests {
     use syn::{parse_quote, Type};
 
     use crate::dispatch::ret::handle_default_ret_type;
     #[test]
-    fn token_test() {        
+    fn token_test() {
         let ref_option: Type = parse_quote!(&Option<String>);
         let _result = handle_default_ret_type(&ref_option);
 

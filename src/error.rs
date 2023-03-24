@@ -22,7 +22,6 @@ impl Diagnostic {
         } else {
             self.0 = Some(Error::new_spanned(token, error));
         }
-        
     }
 
     pub fn map<F>(&self, f: F) -> Option<TokenStream>

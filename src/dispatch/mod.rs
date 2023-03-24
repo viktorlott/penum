@@ -20,7 +20,7 @@ use crate::{factory::TraitBound, utils::UniqueHashId};
 
 use standard::{StandardTrait, TraitSchematic};
 
-use self::ret::{return_panic, handle_default_ret_type};
+use self::ret::{handle_default_ret_type, return_panic};
 
 mod ret;
 mod standard;
@@ -182,7 +182,9 @@ impl<'bound> Blueprint<'bound> {
                 // `None` instead. Read more /docs/static-dispatch.md
                 let default_return = match signature.output.borrow() {
                     syn::ReturnType::Default => quote::quote!(()),
-                    syn::ReturnType::Type(_, ty) => handle_default_ret_type(ty).unwrap_or_else(return_panic)
+                    syn::ReturnType::Type(_, ty) => {
+                        handle_default_ret_type(ty).unwrap_or_else(return_panic)
+                    }
                 };
 
                 // A method item that is ready to be implemented

@@ -163,7 +163,6 @@ impl Penum<Disassembled> {
                     let item_ty_string = item_field.ty.get_string();
                     let item_ty_unique = UniqueHashId(item_field.ty.clone());
 
-
                     if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
                         let bounds = &ty_impl_trait.bounds;
 
@@ -259,7 +258,6 @@ impl Penum<Disassembled> {
                         // to trait bound.
                         self.types
                             .polymap_insert(item_ty_unique.clone(), item_ty_unique);
-
                     } else if item_ty_string.eq(&pat_ty_string) {
                         self.types.polymap_insert(
                             pat_ty_unique, // PATTERN
@@ -280,9 +278,11 @@ impl Penum<Disassembled> {
                     let path = bp.get_sanatized_impl_path();
                     let methods = bp.get_associated_methods();
 
-                    let assocs = bp.get_mapped_bindings()
-                        .map(|bind| bind.iter().map(|b| b.to_token_stream())
-                        .collect::<TokenStream2>());
+                    let assocs = bp.get_mapped_bindings().map(|bind| {
+                        bind.iter()
+                            .map(|b| b.to_token_stream())
+                            .collect::<TokenStream2>()
+                    });
 
                     let implementation: ItemImpl = parse_quote!(
                         impl #path for #enum_ident {

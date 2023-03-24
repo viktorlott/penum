@@ -9,7 +9,6 @@ pub trait AbcTrait {
     fn c(&self) -> (Option<i32>, &Option<&String>);
 }
 
-
 impl AbcTrait for String {
     fn a(&self) -> Option<i32> {
         Some(10)
@@ -37,7 +36,7 @@ enum Foo1 {
 #[penum((T) where T:  ^Add<i32, Output = i32>)]
 enum Foo2 {
     Bar(i32),
-    Bor(i32)
+    Bor(i32),
 }
 
 fn main() {
@@ -48,7 +47,6 @@ fn main() {
     assert_eq!(Some(10), foot1.a());
     assert_eq!(&Some(20), foot1.b());
     assert_eq!((Some(30), &None), foot1.c());
-
 
     let foot2 = Foo2::Bar(100);
     assert_eq!(300, foot2 + 200);

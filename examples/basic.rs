@@ -27,6 +27,4 @@ pub trait AbcTrait {
     fn b(&self) -> &Option<i32>;
 }
 
-fn main() {
-    
-}
+fn main() {}
