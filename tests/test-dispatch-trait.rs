@@ -7,6 +7,7 @@ pub trait AbcTrait {
     fn a(&self) -> Option<i32>;
     fn b(&self) -> &Option<i32>;
     fn c(&self) -> (Option<i32>, &Option<&String>);
+    fn d(&self) -> &String;
 }
 
 impl AbcTrait for String {
@@ -21,6 +22,10 @@ impl AbcTrait for String {
     fn c(&self) -> (Option<i32>, &Option<&String>) {
         (Some(30), &None)
     }
+
+    fn d(&self) -> &String {
+        self
+    }
 }
 
 #[penum( (T) where T: ^AsRef<str> )]
@@ -28,9 +33,10 @@ enum Foo {
     Bar(String),
 }
 
-#[penum( (T) where T: ^AbcTrait )]
+#[penum( unit | (T) where T: ^AbcTrait )]
 enum Foo1 {
     Bar(String),
+    Bor
 }
 
 #[penum((T) where T:  ^Add<i32, Output = i32>)]
@@ -47,6 +53,7 @@ fn main() {
     assert_eq!(Some(10), foot1.a());
     assert_eq!(&Some(20), foot1.b());
     assert_eq!((Some(30), &None), foot1.c());
+
 
     let foot2 = Foo2::Bar(100);
     assert_eq!(300, foot2 + 200);

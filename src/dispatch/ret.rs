@@ -1,67 +1,103 @@
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use syn::{parse_str, ExprMacro, Type};
+use syn::{parse_str, ExprMacro, Type, spanned::Spanned};
 
-// We could use Visit pattern here, but it was easier to do it like this.
+
+// This is kind of a redundant solution..
+fn static_return<T: ToTokens + Spanned>(ty: &T) -> TokenStream {
+    quote::quote_spanned!(ty.span()=>
+        {
+            use std::cell::UnsafeCell;
+            struct Static<T: Default, F = fn() -> T>(UnsafeCell<Option<T>>, F);
+            unsafe impl<T: Default> Sync for Static<T> {}
+            impl<T: Default> Static<T> {
+                pub const fn new() -> Self {
+                    Self(UnsafeCell::new(None), || T::default())
+                }
+                fn get(&self) -> &'static T {
+                    unsafe { &mut *self.0.get() }.get_or_insert_with(self.1)
+                }
+            }
+            static RETURN: Static<#ty> = Static::new();
+            RETURN.get()
+        }
+    )
+}
+
+
+// We could use Visit pattern here, but it was easier to do it like
+// this.
 pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
     let mut ctx = TokenStream::new();
-    let mut error = false;
-
+    let mut is_ref = false;
     loop {
         match ty {
             // Referenced return types:
             //
-            // - &T where T implements Default doesn't
-            //   really matter because it's not possible to
-            //   return `&Default::default()`, even if `T`
-            //   is a Copy type. `&0` would work, but
-            //   `&Default::default()` or `&i32::default()`
-            //   would not.`
+            // - &T where T implements Default doesn't really matter
+            //   because it's not possible to return
+            //   `&Default::default()`, even if `T` is a Copy type. `&0`
+            //   would work, but `&Default::default()` or
+            //   `&i32::default()` would not.`
             //
-            // - &Option<T> could automatically be defaulted
-            //   to `&None`.
+            // - &Option<T> could automatically be defaulted to `&None`.
             //
-            // - &Result<i32, Option<T>> could also be
-            //   defaulted to &Err(None)
+            // - &Result<i32, Option<T>> could also be defaulted to
+            //   &Err(None)
             Type::Reference(ty_ref) => {
                 if ty_ref.mutability.is_some() {
-                    error = true;
-                    break;
+                    return None
                 }
+
+                is_ref = true;
+
                 ctx.extend(quote::quote!(&));
                 ty = &*ty_ref.elem;
             }
 
             // Owned return types without any references:
             //
-            // - Types that can be proven implements Default
-            //   could be returned with `Default::default()`
+            // - Types that can be proven implements Default could be
+            //   returned with `Default::default()`
             //
-            // - Option<T> could automatically be defaulted
-            //   to `None`.
+            // - Option<T> could automatically be defaulted to `None`.
             //
-            // - Result<T, U> needs to recursively check `U`
-            //   to find a defaultable type. If we could
-            //   prove that `U` implements Default, then we
-            //   could just `Err(Default::default())`.
+            // - Result<T, U> needs to recursively check `U` to find a
+            //   defaultable type. If we could prove that `U` implements
+            //   Default, then we could just `Err(Default::default())`.
+            //
+            //   | "bool" | "u8" | "u16" | "u32" | "u64" | "i8" | "i16"
+            //   | "i32" | "i64"
             Type::Path(path) => {
                 if let Some(path_seg) = path.path.segments.last() {
-                    if path_seg.ident.to_string().eq("Option") {
-                        ctx.extend(quote::quote!(None));
-                        break;
+                    match path_seg.ident.to_string().as_str() {
+                        "Option" => {
+                            ctx.extend(quote::quote!(None));
+                            return Some(ctx)
+                        }
+                        "str" => {
+                            return Some(quote::quote!(""))
+                        }
+                        "String" => {
+                            if is_ref {
+                                return Some(static_return(&path_seg.ident))
+                            } else {
+                                return Some(quote::quote!("".to_string()))
+                            }
+                        }
+                        // "Result" => {}
+                        _ => return None
                     }
                 };
 
-                error = true;
-                break;
+                return None
             }
 
             Type::Tuple(tuple) => {
                 let len = tuple.elems.len();
 
                 if len == 0 {
-                    error = true;
-                    break;
+                    return None
                 }
 
                 let mut group = TokenStream::new();
@@ -70,8 +106,7 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
                     if let Some(tokens) = handle_default_ret_type(ty) {
                         group.extend(tokens);
                     } else {
-                        error = true;
-                        break;
+                        return None
                     }
                     if i != len - 1 {
                         group.extend(quote::quote!(,));
@@ -80,18 +115,12 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
 
                 ctx.extend(quote::quote!((#group)));
 
-                break;
+                return Some(ctx)
             }
-            // Some `Type`s can't even be considered as
-            // valid return types.
-            _ => break,
+            // Some `Type`s can't even be considered as valid return
+            // types.
+            _ => return None,
         }
-    }
-
-    if error {
-        None
-    } else {
-        Some(ctx)
     }
 }
 

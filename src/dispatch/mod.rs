@@ -606,14 +606,35 @@ fn get_method_parts(method: &TraitItemMethod) -> (&Ident, Punctuated<Pat, Comma>
 // struct Abc(String);
 
 // impl Abc {
-
 //     fn a(&self) -> &Opt<i32> {
 //         &Opt::None
+
 //     }
-//     fn b(&self) -> &Result<i32, ()> {
-//         &Err(())
+//     fn b(&self) -> &Option<i32> {
+//         &None
 //     }
 //     fn c(&self) -> &Result<i32, ()> {
 //         &Err(())
+//     }
+//     fn d(&self) -> &i32 {
+//         // &i32::default() Doesn't work (cannot return reference to temporary value)
+//         &10 // Work
+//     }
+//     fn e(&self) -> &str {
+//         {   
+//             use std::cell::UnsafeCell;
+//             struct Static<T: Default, F = fn() -> T>(UnsafeCell<Option<T>>, F);
+//             unsafe impl<T: Default> Sync for Static<T> {}
+//             impl<T: Default> Static<T> {
+//                 pub const fn new() -> Self {
+//                     Self(UnsafeCell::new(None), || T::default())
+//                 }
+//                 fn get(&self) -> &'static T {
+//                     unsafe { &mut *self.0.get() }.get_or_insert_with(self.1)
+//                 }
+//             }
+//             static RETURN: Static<String> = Static::new();
+//             RETURN.get()
+//         }
 //     }
 // }
