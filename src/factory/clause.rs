@@ -37,7 +37,7 @@ pub enum TypeParamBound {
     Lifetime(Lifetime),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub struct TraitBound {
     pub paren_token: Option<token::Paren>,
     pub dispatch: Option<Token![^]>,

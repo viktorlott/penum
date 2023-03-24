@@ -22,12 +22,28 @@ struct A<T>(T);
 
 impl<T> Trait for A<T> {}
 
-#[penum{
-    pattern = (impl Copy)
-}]
-enum Vector3<'a> {
-    Integer(&'a str),
-    // Hello (usize, usize)
+pub trait AbcTrait {
+    fn a(&self) -> Option<i32>;
+}
+
+
+impl AbcTrait for i32 {
+    fn a(&self) -> Option<i32> {
+        Some(10)
+    }
+}
+
+
+#[penum( (T) where T: ^AbcTrait )]
+enum Vector3 {
+    Integer(i32),
+}
+
+fn main() {
+
+    let s = Vector3::Integer(10);
+
+    // let m = s.a();
 }
 
 // #[penum( (_) where i32: Trait ) ]
@@ -77,7 +93,7 @@ impl MultiMethod for String {
     }
 }
 
-fn main() {}
+
 
 // struct A<T>(T);
 

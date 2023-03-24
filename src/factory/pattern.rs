@@ -168,7 +168,7 @@ impl PenumExpr {
                         let ty = UniqueHashId(pred_ty.bounded_ty.clone());
 
                         if let Some(entry) = polymap.get_mut(&ty) {
-                            entry.append(&mut blueprints)
+                            entry.append(&mut blueprints);
                         } else {
                             polymap.insert(ty, blueprints);
                         }

@@ -5,6 +5,7 @@ use syn::{parse_str, ItemTrait};
 
 #[derive(Debug)]
 pub enum StandardTrait {
+    AbcTrait,
     Any,
     Borrow,
     BorrowMut,
@@ -73,13 +74,14 @@ pub enum StandardTrait {
 }
 
 #[repr(transparent)]
-#[derive(Clone)]
+#[derive(Clone, Hash, Debug)]
 pub struct TraitSchematic(pub ItemTrait);
 
 impl From<StandardTrait> for TraitSchematic {
     fn from(value: StandardTrait) -> Self {
         TraitSchematic(
             match value {
+                StandardTrait::AbcTrait => parse_str(include_str!("./AbcTrait.rs")),
                 StandardTrait::Any => parse_str(include_str!("./Any.rs")),
                 StandardTrait::Borrow => parse_str(include_str!("./Borrow.rs")),
                 StandardTrait::BorrowMut => parse_str(include_str!("./BorrowMut.rs")),
@@ -155,6 +157,7 @@ impl FromStr for StandardTrait {
     type Err = ();
     fn from_str(value: &str) -> Result<Self, ()> {
         Ok(match value {
+            "AbcTrait" => Self::AbcTrait,
             "Any" => Self::Any,
             "Borrow" => Self::Borrow,
             "BorrowMut" => Self::BorrowMut,
@@ -227,6 +230,7 @@ impl FromStr for StandardTrait {
 impl From<&Ident> for StandardTrait {
     fn from(value: &Ident) -> Self {
         match value.to_string().as_str() {
+            "AbcTrait" => Self::AbcTrait,
             "Any" => Self::Any,
             "Borrow" => Self::Borrow,
             "BorrowMut" => Self::BorrowMut,

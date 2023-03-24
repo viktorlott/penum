@@ -20,6 +20,9 @@ use crate::{factory::TraitBound, utils::UniqueHashId};
 
 use standard::{StandardTrait, TraitSchematic};
 
+use self::ret::{return_panic, handle_return_type};
+
+mod ret;
 mod standard;
 
 /// Only use this for modifying methods trait generics. Should probably
@@ -55,7 +58,7 @@ struct MonomorphizeTraitBound<'poly>(&'poly BTreeMap<Ident, &'poly Type>);
 struct RemoveBoundBindings;
 
 #[repr(transparent)]
-#[derive(Default)]
+#[derive(Default, Hash, Debug)]
 pub struct Blueprints<'bound>(BTreeMap<UniqueHashId<Type>, Vec<Blueprint<'bound>>>);
 
 /// This blueprint contains everything we need to construct an impl
@@ -78,7 +81,7 @@ pub struct Blueprints<'bound>(BTreeMap<UniqueHashId<Type>, Vec<Blueprint<'bound>
 /// ```rust
 /// Foo::Bar(_, val, ..) => val.as_ref()
 /// ```
-#[derive(Clone)]
+#[derive(Clone, Hash, Debug)]
 pub struct Blueprint<'bound> {
     /// Trait bound
     pub bound: &'bound TraitBound,
@@ -179,52 +182,7 @@ impl<'bound> Blueprint<'bound> {
                 // `None` instead. Read more /docs/static-dispatch.md
                 let default_return = match signature.output.borrow() {
                     syn::ReturnType::Default => quote::quote!(()),
-                    syn::ReturnType::Type(_, ty) => match &**ty {
-                        // Owned return types without any references:
-                        //
-                        // - Types that can be proven implements Default
-                        //   could be returned with `Default::default()`
-                        //
-                        // - Option<T> could automatically be defaulted
-                        //   to `None`.
-                        //
-                        // - Result<T, U> needs to recursively check `U`
-                        //   to find a defaultable type. If we could
-                        //   prove that `U` implements Default, then we
-                        //   could just `Err(Default::default())`.
-                        Type::Path(_) => return_panic(),
-
-                        // Referenced return types:
-                        //
-                        // - &T where T implements Default doesn't
-                        //   really matter because it's not possible to
-                        //   return `&Default::default()`, even if `T`
-                        //   is a Copy type. `&0` would work, but
-                        //   `&Default::default()` or `&i32::default()`
-                        //   would not.`
-                        //
-                        // - &Option<T> could automatically be defaulted
-                        //   to `&None`.
-                        //
-                        // - &Result<i32, Option<T>> could also be
-                        //   defaulted to &Err(None)
-                        Type::Reference(_) => return_panic(),
-
-                        // Add support for these later.
-                        Type::Array(_) => return_panic(),
-                        Type::BareFn(_) => return_panic(),
-                        Type::Group(_) => return_panic(),
-                        Type::ImplTrait(_) => return_panic(),
-                        Type::Macro(_) => return_panic(),
-                        Type::Paren(_) => return_panic(),
-                        Type::Tuple(_) => return_panic(),
-                        Type::Never(_) => return_panic(),
-                        Type::Ptr(_) => return_panic(),
-
-                        // Some `Type`s can't even be considered as
-                        // valid return types.
-                        _ => return_panic(),
-                    },
+                    syn::ReturnType::Type(_, ty) => handle_return_type(ty).unwrap_or_else(return_panic)
                 };
 
                 // A method item that is ready to be implemented
@@ -631,11 +589,4 @@ fn get_method_parts(method: &TraitItemMethod) -> (&Ident, Punctuated<Pat, Comma>
     let TraitItemMethod { sig, .. } = method;
     let Signature { ident, inputs, .. } = sig;
     (ident, sanitize(inputs))
-}
-
-fn return_panic() -> TokenStream {
-    // Might be better ways of parsing macros.
-    parse_str::<ExprMacro>("panic!(\"Missing arm\")")
-        .unwrap()
-        .to_token_stream()
 }

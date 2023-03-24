@@ -161,8 +161,8 @@ impl Penum<Disassembled> {
 
                     // TODO: Refactor into TypeId instead.
                     let item_ty_string = item_field.ty.get_string();
-
                     let item_ty_unique = UniqueHashId(item_field.ty.clone());
+
 
                     if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
                         let bounds = &ty_impl_trait.bounds;
@@ -175,14 +175,14 @@ impl Penum<Disassembled> {
                                         impl_string
                                             .push_str(&trait_bound.get_unique_trait_bound_id())
                                     } else {
-                                        self.error.extend(
-                                            bound.span(),
+                                        self.error.extend_spanned(
+                                            bound,
                                             maybe_bounds_not_permitted(trait_bound),
                                         );
                                     }
                                 }
                                 syn::TypeParamBound::Lifetime(_) => {
-                                    self.error.extend(bound.span(), lifetime_not_permitted());
+                                    self.error.extend_spanned(bound, lifetime_not_permitted());
                                 }
                             }
                         }
@@ -265,8 +265,8 @@ impl Penum<Disassembled> {
                             item_ty_unique,
                         );
                     } else {
-                        self.error.extend(
-                            item_field.ty.span(),
+                        self.error.extend_spanned(
+                            &item_field.ty,
                             format!("Found `{item_ty_string}` but expected `{pat_ty_string}`."),
                         );
                     }
@@ -321,6 +321,8 @@ impl Penum<Assembled> {
                 let enum_item = self.subject;
                 let impl_items = self.impls;
                 let output = quote::quote!(#enum_item #(#impl_items)*);
+
+                println!("{}", output);
                 output
             })
             .into()

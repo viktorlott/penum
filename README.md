@@ -21,14 +21,14 @@ given pattern that can include generics with trait bounds, which then
 allows for `static dispatching`. It's a tool for asserting how enums
 should look and behave through simple expressive rust grammar.
 
-- **Patterns** — can be though of a toy shape sorter, where the enum
-  variants are shape pieces that are trying to fit the given pattern
-  we've expressed. There are 3 shapes to choose from, *tuples* `()`,
-  *structs* `{}` and *units*. 
+- **Patterns** — can be thought of as a toy shape sorter, where the enum
+  variants are shapes that are trying to fit the given pattern we've
+  expressed. There are 3 shapes to choose from, *tuples* `()`, *structs*
+  `{}` and *units*. 
 
 - **Trait bounds** — are used in combination with *generic parameters*
   to assert what the matched variants field types should implement, and
-  can be expressed like this `where T: Trait<Type>`. The *generic
+  can be expressed like this, `where T: Trait<Type>`. The *generic
   parameters* actually needs to be introduced inside a pattern fragment. 
 
 - **Static dispatch** — lets us express how an enum should behave in
@@ -88,15 +88,16 @@ bounds.*
                       Dispatch symbol
 ```
 ### Trivial example:
-- Here he have an enum with two unary tuple variants where the parameter
-  type `Struct` implements the trait `Trait`. The goal is to be able to
-  call the trait `method` through `Foo`. This can be accomplished
-  automatically marking the trait with a dispatch symbol `^`.
+- Here we have an enum with one unary and one binary tuple variant where
+  the field type `Storage` and `Something` implements the trait `Trait`.
+  The goal is to be able to call the trait `method` through `Foo`. This
+  can be accomplished automatically marking the trait with a dispatch
+  symbol `^`.
 ```rust
-#[penum{ (T) where T: ^Trait }]
+#[penum{ (T) | (_, T) where T: ^Trait }]
 enum Foo {
-    V1(Struct), 
-    V2(Struct), 
+    V1(Storage), 
+    V2(i32, Something), 
 }
 ```
 
@@ -106,7 +107,7 @@ impl Trait for Foo {
     fn method(&self, text: &str) {
         match self {
             V1(val) => val.method(text),
-            V2(val) => val.method(text),
+            V2(_, val) => val.method(text),
         }
     }
 }
@@ -115,11 +116,13 @@ impl Trait for Foo {
 <summary>*Boilerplate code for the example above*</summary>
 
 ```rust
-    struct Struct;
+    struct Storage;
+    struct Something;
     trait Trait {
         fn method(&self, text: &str);
     }
-    impl Trait for Struct {}
+    impl Trait for Storage {}
+    impl Trait for Something {}
 ```
 
 </details>
@@ -136,9 +139,9 @@ enum Guard {
         ^^^^^^
     // ERROR: `String` doesn't implement `Copy`
 
-    Bor(&str), 
-        ^^^^
-    // ERROR: `&str` doesn't implement `Copy`
+    Bor(Option<&str>), 
+        ^^^^^^^^^^^^
+    // ERROR: `Option<&str>` doesn't implement `Copy`
 
     Bur(Vec<i32>), 
         ^^^^^^^^
@@ -156,7 +159,7 @@ enum Guard {
         ^^^^^^^^^^^^^^^
     // ERROR: `{ nname: usize }` doesn't match pattern `(T)`
 
-    Brr, 
+    Brr,
     ^^^
     // ERROR: `Brr` doesn't match pattern `(T)`
 
@@ -171,9 +174,9 @@ enum Guard {
         ^^^^^^
     // ERROR: `String` doesn't implement `Copy`
 
-    Bor(Vec<&str>), 
-        ^^^^^^^^^
-    // ERROR: `Vec<&str>` doesn't implement `Copy`
+    Bor(Option<&str>), 
+        ^^^^^^^^^^^^
+    // ERROR: `Option<&str>` doesn't implement `Copy`
 
     Bur(Vec<i32>), 
         ^^^^^^^^

@@ -87,7 +87,7 @@ impl<T: Hash> Deref for UniqueHashId<T> {
 
 impl Default for UniqueHashId<Type> {
     fn default() -> Self {
-        Self(parse_quote!(!))
+        Self(parse_quote!(_))
     }
 }
 

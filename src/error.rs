@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use proc_macro2::{Span, TokenStream};
+use quote::ToTokens;
 use syn::Error;
 
 #[derive(Default)]
@@ -13,6 +14,15 @@ impl Diagnostic {
         } else {
             self.0 = Some(Error::new(span, error));
         }
+    }
+
+    pub fn extend_spanned(&mut self, token: impl ToTokens, error: impl Display) {
+        if let Some(err) = self.0.as_mut() {
+            err.combine(Error::new_spanned(token, error));
+        } else {
+            self.0 = Some(Error::new_spanned(token, error));
+        }
+        
     }
 
     pub fn map<F>(&self, f: F) -> Option<TokenStream>
