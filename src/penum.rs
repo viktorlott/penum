@@ -259,6 +259,7 @@ impl Penum<Disassembled> {
                         // to trait bound.
                         self.types
                             .polymap_insert(item_ty_unique.clone(), item_ty_unique);
+
                     } else if item_ty_string.eq(&pat_ty_string) {
                         self.types.polymap_insert(
                             pat_ty_unique, // PATTERN
@@ -277,17 +278,20 @@ impl Penum<Disassembled> {
             if let Some(bp_map) = maybe_blueprints {
                 bp_map.for_each_blueprint(|bp| {
                     let path = bp.get_sanatized_impl_path();
-                    if let Some(assocs) = bp.get_mapped_bindings() {
-                        let methods = bp.get_associated_methods();
-                        let implementation: ItemImpl = parse_quote!(
-                            impl #path for #enum_ident {
-                                #(#assocs)*
+                    let methods = bp.get_associated_methods();
 
-                                #(#methods)*
-                            }
-                        );
-                        self.impls.push(implementation);
-                    }
+                    let assocs = bp.get_mapped_bindings()
+                        .map(|bind| bind.iter().map(|b| b.to_token_stream())
+                        .collect::<TokenStream2>());
+
+                    let implementation: ItemImpl = parse_quote!(
+                        impl #path for #enum_ident {
+                            #assocs
+
+                            #(#methods)*
+                        }
+                    );
+                    self.impls.push(implementation);
                 });
             }
 
@@ -322,7 +326,6 @@ impl Penum<Assembled> {
                 let impl_items = self.impls;
                 let output = quote::quote!(#enum_item #(#impl_items)*);
 
-                println!("{}", output);
                 output
             })
             .into()

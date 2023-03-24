@@ -4,15 +4,15 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2::{Ident, Span};
 use quote::ToTokens;
 use syn::{
-    parse_quote, parse_quote_spanned, parse_str,
+    parse_quote, parse_quote_spanned,
     punctuated::Punctuated,
     spanned::Spanned,
     token::{self, Comma},
     visit_mut::{visit_angle_bracketed_generic_arguments_mut, visit_type_mut, VisitMut},
-    Arm, Binding, ExprMacro, Field, FnArg, GenericArgument, Pat, Signature, Token,
+    Arm, Binding, Field, FnArg, GenericArgument, Pat, Signature, Token,
     TraitBound as SynTraitBound, TraitItem, TraitItemMethod, TraitItemType, Type, TypeParam,
 };
 
@@ -20,7 +20,7 @@ use crate::{factory::TraitBound, utils::UniqueHashId};
 
 use standard::{StandardTrait, TraitSchematic};
 
-use self::ret::{return_panic, handle_return_type};
+use self::ret::{return_panic, handle_default_ret_type};
 
 mod ret;
 mod standard;
@@ -182,7 +182,7 @@ impl<'bound> Blueprint<'bound> {
                 // `None` instead. Read more /docs/static-dispatch.md
                 let default_return = match signature.output.borrow() {
                     syn::ReturnType::Default => quote::quote!(()),
-                    syn::ReturnType::Type(_, ty) => handle_return_type(ty).unwrap_or_else(return_panic)
+                    syn::ReturnType::Type(_, ty) => handle_default_ret_type(ty).unwrap_or_else(return_panic)
                 };
 
                 // A method item that is ready to be implemented

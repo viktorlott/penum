@@ -1,67 +1,32 @@
-use proc_macro2::{Ident, Span, TokenStream};
-use quote::{format_ident, ToTokens};
+use proc_macro2::TokenStream;
+use quote::ToTokens;
 use syn::{
-    parse_quote, parse_str,
-    visit::{visit_type_path, Visit},
-    ExprMacro, Type, TypePath, TypeReference, token,
+    parse_str,
+    ExprMacro, Type
 };
 
 
-
-
-// match &**ty {
-//     // Owned return types without any references:
-//     //
-//     // - Types that can be proven implements Default
-//     //   could be returned with `Default::default()`
-//     //
-//     // - Option<T> could automatically be defaulted
-//     //   to `None`.
-//     //
-//     // - Result<T, U> needs to recursively check `U`
-//     //   to find a defaultable type. If we could
-//     //   prove that `U` implements Default, then we
-//     //   could just `Err(Default::default())`.
-//     Type::Path(_) => return_panic(),
-
-//     // Referenced return types:
-//     //
-//     // - &T where T implements Default doesn't
-//     //   really matter because it's not possible to
-//     //   return `&Default::default()`, even if `T`
-//     //   is a Copy type. `&0` would work, but
-//     //   `&Default::default()` or `&i32::default()`
-//     //   would not.`
-//     //
-//     // - &Option<T> could automatically be defaulted
-//     //   to `&None`.
-//     //
-//     // - &Result<i32, Option<T>> could also be
-//     //   defaulted to &Err(None)
-//     Type::Reference(_) => return_panic(),
-
-//     // Add support for these later.
-//     Type::Paren(_) => return_panic(),
-//     Type::Tuple(_) => return_panic(),
-//     Type::ImplTrait(_) => return_panic(),
-//     Type::Array(_) => return_panic(),
-//     Type::BareFn(_) => return_panic(),
-
-//     // Ouff, dunno
-//     Type::Group(_) => return_panic(),
-//     Type::Macro(_) => return_panic(),
-//     Type::Never(_) => return_panic(),
-//     Type::Ptr(_) => return_panic(),
-
-//     // Some `Type`s can't even be considered as
-//     // valid return types.
-//     _ => return_panic(),
-// }
-pub fn handle_return_type(mut ty: &Type) -> Option<TokenStream> {
+// We could use Visit pattern here, but it was easier to do it like this.
+pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
     let mut ctx = TokenStream::new();
     let mut error = false;
+
     loop {
         match ty {
+            // Referenced return types:
+            //
+            // - &T where T implements Default doesn't
+            //   really matter because it's not possible to
+            //   return `&Default::default()`, even if `T`
+            //   is a Copy type. `&0` would work, but
+            //   `&Default::default()` or `&i32::default()`
+            //   would not.`
+            //
+            // - &Option<T> could automatically be defaulted
+            //   to `&None`.
+            //
+            // - &Result<i32, Option<T>> could also be
+            //   defaulted to &Err(None)
             Type::Reference(ty_ref) => {
                 if ty_ref.mutability.is_some() {
                     error = true;
@@ -70,6 +35,19 @@ pub fn handle_return_type(mut ty: &Type) -> Option<TokenStream> {
                 ctx.extend(quote::quote!(&));
                 ty = &*ty_ref.elem;
             }
+
+            // Owned return types without any references:
+            //
+            // - Types that can be proven implements Default
+            //   could be returned with `Default::default()`
+            //
+            // - Option<T> could automatically be defaulted
+            //   to `None`.
+            //
+            // - Result<T, U> needs to recursively check `U`
+            //   to find a defaultable type. If we could
+            //   prove that `U` implements Default, then we
+            //   could just `Err(Default::default())`.
             Type::Path(path) => {
                 if let Some(path_seg) = path.path.segments.last() {
                     if path_seg.ident.to_string().eq("Option") {
@@ -81,6 +59,8 @@ pub fn handle_return_type(mut ty: &Type) -> Option<TokenStream> {
                 error = true;
                 break;
             }
+
+
             Type::Tuple(tuple) => {
                 let len = tuple.elems.len();
 
@@ -92,7 +72,7 @@ pub fn handle_return_type(mut ty: &Type) -> Option<TokenStream> {
                 let mut group = TokenStream::new();
 
                 for (i, ty) in tuple.elems.iter().enumerate() {
-                    if let Some(tokens) = handle_return_type(ty) {
+                    if let Some(tokens) = handle_default_ret_type(ty) {
                         group.extend(tokens);
                     } else {
                         error = true;
@@ -107,6 +87,8 @@ pub fn handle_return_type(mut ty: &Type) -> Option<TokenStream> {
 
                 break;
             }
+            // Some `Type`s can't even be considered as
+            // valid return types.
             _ => break,
         }
     }
@@ -127,43 +109,17 @@ pub fn return_panic() -> TokenStream {
 }
 
 
-// #[cfg(test)]
-// mod tests {
-//     use proc_macro2::TokenStream;
-//     use syn::{parse_quote, TypeReference, Type};
+#[cfg(test)]
+mod tests {
+    use syn::{parse_quote, Type};
 
-//     use crate::dispatch::ret::{handle_reference, handle_type};
-//     #[test]
-//     fn token_test() {
-        
-//         let ref_option: Type = parse_quote!(&Option<String>);
-//         let ref_option_tuple: Type = parse_quote!(&(&Option<i32>, Option<i32>));
+    use crate::dispatch::ret::handle_default_ret_type;
+    #[test]
+    fn token_test() {        
+        let ref_option: Type = parse_quote!(&Option<String>);
+        let _result = handle_default_ret_type(&ref_option);
 
-//         let mut group = TokenStream::new();
-//         handle_type(&ref_option, &mut group);
-//         println!("tuple {}", group);
-
-//         // let ref_option_tuple: TypeReference = parse_quote!(&(Option<i32>, Option<i32>));
-
-//         // println!("tuple {}", handle_reference(&ref_option_tuple));
-//     }
-// }
-
-
-// trait Trait {
-//     fn ret(&self) -> &(Option<i32>, Option<String>);
-//     fn ret2(&self) -> &(&Option<i32>, Option<String>);
-// }
-
-// struct A(i32);
-
-// impl Trait for A {
-//     fn ret(&self) -> &(Option<i32>, Option<String>) {
-//         &(None, None)
-//     }
-
-//     fn ret2(&self) -> &(&Option<i32>, Option<String>) {
-//         &(&None, None)
-//     }
-    
-// }
+        let ref_option_tuple: Type = parse_quote!(&(&Option<i32>, Option<i32>));
+        let _result = handle_default_ret_type(&ref_option_tuple);
+    }
+}
