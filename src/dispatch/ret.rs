@@ -1,7 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use syn::{parse_str, ExprMacro, Type, spanned::Spanned};
-
+use syn::{parse_str, spanned::Spanned, ExprMacro, Type};
 
 // This is kind of a redundant solution..
 fn static_return<T: ToTokens + Spanned>(ty: &T) -> TokenStream {
@@ -24,7 +23,6 @@ fn static_return<T: ToTokens + Spanned>(ty: &T) -> TokenStream {
     )
 }
 
-
 // We could use Visit pattern here, but it was easier to do it like
 // this.
 pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
@@ -46,7 +44,7 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
             //   &Err(None)
             Type::Reference(ty_ref) => {
                 if ty_ref.mutability.is_some() {
-                    return None
+                    return None;
                 }
 
                 is_ref = true;
@@ -73,31 +71,29 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
                     match path_seg.ident.to_string().as_str() {
                         "Option" => {
                             ctx.extend(quote::quote!(None));
-                            return Some(ctx)
+                            return Some(ctx);
                         }
-                        "str" => {
-                            return Some(quote::quote!(""))
-                        }
+                        "str" => return Some(quote::quote!("")),
                         "String" => {
                             if is_ref {
-                                return Some(static_return(&path_seg.ident))
+                                return Some(static_return(&path_seg.ident));
                             } else {
-                                return Some(quote::quote!("".to_string()))
+                                return Some(quote::quote!("".to_string()));
                             }
                         }
                         // "Result" => {}
-                        _ => return None
+                        _ => return None,
                     }
                 };
 
-                return None
+                return None;
             }
 
             Type::Tuple(tuple) => {
                 let len = tuple.elems.len();
 
                 if len == 0 {
-                    return None
+                    return None;
                 }
 
                 let mut group = TokenStream::new();
@@ -106,7 +102,7 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
                     if let Some(tokens) = handle_default_ret_type(ty) {
                         group.extend(tokens);
                     } else {
-                        return None
+                        return None;
                     }
                     if i != len - 1 {
                         group.extend(quote::quote!(,));
@@ -115,7 +111,7 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
 
                 ctx.extend(quote::quote!((#group)));
 
-                return Some(ctx)
+                return Some(ctx);
             }
             // Some `Type`s can't even be considered as valid return
             // types.

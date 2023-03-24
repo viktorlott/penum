@@ -621,7 +621,7 @@ fn get_method_parts(method: &TraitItemMethod) -> (&Ident, Punctuated<Pat, Comma>
 //         &10 // Work
 //     }
 //     fn e(&self) -> &str {
-//         {   
+//         {
 //             use std::cell::UnsafeCell;
 //             struct Static<T: Default, F = fn() -> T>(UnsafeCell<Option<T>>, F);
 //             unsafe impl<T: Default> Sync for Static<T> {}
