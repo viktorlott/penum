@@ -20,7 +20,8 @@
 **automatic dispatch**. This is done by specifying a declarative pattern
 that express how we should interprete the enum. It's a tool for
 asserting how enums should **look** and **behave** through simple
-expressive rust grammar.
+expressive rust grammar. *Allowing developers to assert how an enum
+should look and behave.*
 
 - **Patterns** — can be thought of as a *toy shape sorter* that sorts
   through enum variants and makes sure they fit. So each variant has a
@@ -42,12 +43,11 @@ expressive rust grammar.
   variants can be assigned with a *default* return statement. i.e types
   like `Option<_>`, `Result<_, E>` and many other types (*including
   Primitive Types*) can get defaulted automatically for us instead of
-  returning them with a panic. 
+  returning them with a panic. ([read
+  more](https://github.com/viktorlott/penum/blob/main/docs/static-dispatch.md))
 
   *This is currently limited to rust std library traits, but there's
   plans to extend support for custom trait definitions soon.*
-
-*Allowing developers to assert how an enum should look and behave.*
 
 
 ## Installation
@@ -64,22 +64,18 @@ $ cargo add penum
 ## Overview 
 A `Penum` expression can look like this:
 ```text
-#[penum( (T) where T: Trait )]
-         ^^^       ^^^^^^^^
+                      Dispatch symbol
+                      |
+#[penum( (T) where T: ^Trait )]
+         ^^^       ^^^^^^^^^
          |         |
          |         Predicate bound
          |
          Pattern fragment.
 ```
-*note that there can be multiple patterns fragments and predicate
+*Note that there can be multiple patterns fragments and predicate
 bounds.*
 
-Here's how it would look like if we wanted to dispatch a trait.
-```text
-#[penum( (T) where T: ^Trait )]
-                      |
-                      Dispatch symbol
-```
 `Penum` is smart enough to infer certain return types for non-matching
 variants. e.g `Option<T>`, `&Option<T>`, `String`, `&str`. It can even
 handle `&String`, referenced non-const types. The goal is to support any
@@ -98,22 +94,22 @@ return types for non-matching variants,
 
 </details>
 
-  
-**Impls** — can be seen as a shorthand for *a concrete type that
-implements this trait*, and are primarily used as a substitute for
-regular *generic trait bound expressions*. They look something like
-this, `(impl Copy, impl Copy) | {name: impl Clone}`
-  
-**Placeholders** — are single unbounded wildcards, or if you are
-familiar with rust, it's the underscore `_` identifier and usually
-means that something is ignored, which means that they will satisfy
-any type `(_, _) | {num: _}`.
-  
-**Variadic** — are similar to placeholders, but instead of only being
-able to substitute one type, variadics can be substituted by 0 or more
-types. Like placeholders, they are a way to express that we don't care
-about the rest of the parameters in a pattern. The look something like
-this`(T, U, ..) | {num: T, ..}`.
+
+- **Impls** — can be seen as a shorthand for *a concrete type that
+  implements this trait*, and are primarily used as a substitute for
+  regular *generic trait bound expressions*. They look something like
+  this, `(impl Copy, impl Copy) | {name: impl Clone}`
+
+- **Placeholders** — are single unbounded wildcards, or if you are
+  familiar with rust, it's the underscore `_` identifier and usually
+  means that something is ignored, which means that they will satisfy
+  any type `(_, _) | {num: _}`.
+
+- **Variadic** — are similar to placeholders, but instead of only being
+  able to substitute one type, variadics can be substituted by 0 or more
+  types. Like placeholders, they are a way to express that we don't care
+  about the rest of the parameters in a pattern. The look something like
+  this`(T, U, ..) | {num: T, ..}`.
 
 
 ### Trivial example:
@@ -143,8 +139,9 @@ impl Trait for Foo {
     }
 }
 ```
+
 <details>
-<summary>*Boilerplate code for the example above*</summary>
+<summary>Boilerplate code for the example above</summary>
 
 ```rust
     struct Storage;
@@ -152,8 +149,8 @@ impl Trait for Foo {
     trait Trait {
         fn method(&self, text: &str) -> &Option<&str>;
     }
-    impl Trait for Storage {}
-    impl Trait for Something {}
+    impl Trait for Storage { ... }
+    impl Trait for Something { ... }
 ```
 
 </details>
@@ -164,7 +161,7 @@ Used penum to force every variant to be a tuple with one field that must
 implement `Copy`.
 
 ```rust
-#[penum( (T) where T: Copy )]
+#[penum( (T, ..) where T: Copy )]
 enum Guard {
     Bar(String), 
         ^^^^^^
@@ -178,10 +175,6 @@ enum Guard {
         ^^^^^^^^
     // ERROR: `Vec<i32>` doesn't implement `Copy`
 
-    Bir(i32, i32), 
-       ^^^^^^^^^^
-    // ERROR: `(i32, i32)` doesn't match pattern `(T)`
-
     Byr(), 
     ^^^^^
     // ERROR: `Byr()` doesn't match pattern `(T)`
@@ -194,15 +187,14 @@ enum Guard {
     ^^^
     // ERROR: `Brr` doesn't match pattern `(T)`
 
-    Beer(i32) // Works!
+    Bir(i32, String), // Works!
+    Beer(i32)         // Works!
 }
 ```
 
 #### Under development
 - `Static dispatch` - auto implement `core`/`std`/`custom` traits ([read
   more](https://github.com/viktorlott/penum/blob/main/docs/static-dispatch.md)).
-
-
 
 
 |   Traits   |   Supported   |
