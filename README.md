@@ -161,13 +161,13 @@ enum Guard {
         ^^^^^^
     // ERROR: `String` doesn't implement `Copy`
 
-    Bor(Option<&str>), 
-        ^^^^^^^^^^^^
-    // ERROR: `Option<&str>` doesn't implement `Copy`
+    Bor(Option<String>), 
+        ^^^^^^^^^^^^^^
+    // ERROR: `Option<String>` doesn't implement `Copy`
 
-    Bur(Vec<i32>), 
-        ^^^^^^^^
-    // ERROR: `Vec<i32>` doesn't implement `Copy`
+    Bur(Vec<String>), 
+        ^^^^^^^^^^^
+    // ERROR: `Vec<String>` doesn't implement `Copy`
 
     Byr(), 
     ^^^^^
