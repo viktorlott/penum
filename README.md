@@ -20,8 +20,7 @@
 **automatic dispatch**. This is done by specifying a declarative pattern
 that express how we should interprete the enum. It's a tool for
 asserting how enums should **look** and **behave** through simple
-expressive rust grammar. *Allowing developers to assert how an enum
-should look and behave.*
+expressive rust grammar.
 
 - **Patterns** — can be thought of as a *toy shape sorter* that sorts
   through enum variants and makes sure they fit. So each variant has a
@@ -68,7 +67,7 @@ This crate is available on [crates.io](https://crates.io/crates/penum)
 and can be used by adding the following to your project's Cargo.toml:
 ```toml
 [dependencies]
-penum = "0.1.16"
+penum = "0.1.17"
 ```
 Or run this command in your cargo project:
 ```sh
