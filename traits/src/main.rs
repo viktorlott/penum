@@ -110,22 +110,40 @@ fn create_traits_from(base: &str) {
             names.push(trait_ident.to_string());
             traits.push(fmtd_code);
         });
-        
-        let enum_name = "StandardTrait";
-        let enum_variants = names.join(",");
-        let from_enum_to_item = names.iter().zip(traits.iter()).map(|(name, trt)| format!("{enum_name}::{name} => parse_quote!(\n{})", trt.replace('\n', ""))).collect::<Vec<_>>().join(",");
-        let from_str_to_enum = names.iter().map(|name| format!("\"{name}\" => Self::{name}")).collect::<Vec<_>>().join(",");
-        
-        let template = format_code(format!(include_str!("template.md"), enum_name = enum_name, enum_variants = enum_variants, from_enum_to_item = from_enum_to_item, from_str_to_enum = from_str_to_enum));
 
+    let enum_name = "StandardTrait";
+    let enum_variants = names.join(",");
+    let from_enum_to_item = names
+        .iter()
+        .zip(traits.iter())
+        .map(|(name, trt)| {
+            format!(
+                "{enum_name}::{name} => parse_quote!(\n{})",
+                trt.replace('\n', "")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let from_str_to_enum = names
+        .iter()
+        .map(|name| format!("\"{name}\" => Self::{name}"))
+        .collect::<Vec<_>>()
+        .join(",");
 
+    let template = format_code(format!(
+        include_str!("template.md"),
+        enum_name = enum_name,
+        enum_variants = enum_variants,
+        from_enum_to_item = from_enum_to_item,
+        from_str_to_enum = from_str_to_enum
+    ));
 
-        let file = File::create("./trait.rs");
+    let file = File::create("./trait.rs");
 
-        file.unwrap()
-            .write_all(&template.into_bytes())
-            .expect("write file");
-    
+    file.unwrap()
+        .write_all(&template.into_bytes())
+        .expect("write file");
+
     // let core_enum = format_code(format!("enum Core {{ {} }}", names.join(",")));
 
     // let impl_from_str = format_code(format!(

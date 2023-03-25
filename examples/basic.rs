@@ -26,17 +26,15 @@ pub trait AbcTrait {
     fn b(&self) -> &Option<i32>;
 }
 
-
 enum Opt<T> {
     Some(T),
-    None
+    None,
 }
 struct Abc(String);
 
 impl Abc {
     fn a(&self) -> &Opt<i32> {
         &Opt::None
-
     }
     fn b(&self) -> &Option<i32> {
         &None
@@ -85,12 +83,10 @@ impl Abc {
     }
 }
 
-
 fn main() {
     let x = Abc("23".to_string());
 
     let m = x.f();
 
     println!("{}", m);
-
 }

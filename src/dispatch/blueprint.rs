@@ -1,37 +1,36 @@
+use std::borrow::Borrow;
+use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::ops::DerefMut;
-use std::borrow::BorrowMut;
-use std::borrow::Borrow;
 
 use proc_macro2::Ident;
 
+use syn::parse_quote;
+use syn::punctuated::Punctuated;
+use syn::visit_mut::visit_angle_bracketed_generic_arguments_mut;
+use syn::visit_mut::visit_type_mut;
+use syn::visit_mut::VisitMut;
+use syn::Arm;
+use syn::Binding;
+use syn::GenericArgument;
+use syn::Token;
+use syn::TraitBound as SynTraitBound;
+use syn::TraitItem;
+use syn::TraitItemMethod;
+use syn::TraitItemType;
 use syn::Type;
 use syn::TypeParam;
-use syn::TraitItemType;
-use syn::TraitItemMethod;
-use syn::TraitItem;
-use syn::TraitBound as SynTraitBound;
-use syn::Token;
-use syn::GenericArgument;
-use syn::Binding;
-use syn::Arm;
-use syn::visit_mut::VisitMut;
-use syn::visit_mut::visit_type_mut;
-use syn::visit_mut::visit_angle_bracketed_generic_arguments_mut;
-use syn::punctuated::Punctuated;
-use syn::parse_quote;
 
-use crate::utils::UniqueHashId;
 use crate::factory::TraitBound;
+use crate::utils::UniqueHashId;
 
-use super::ret::return_panic;
 use super::ret::handle_default_ret_type;
+use super::ret::return_panic;
 
 use super::sig::VariantSignature;
-use super::standard::TraitSchematic;
 use super::standard::StandardTrait;
-
+use super::standard::TraitSchematic;
 
 /// This blueprint contains everything we need to construct an impl
 /// statement.
@@ -63,12 +62,9 @@ pub struct Blueprint<'bound> {
     pub methods: BTreeMap<Ident, Vec<Arm>>,
 }
 
-
-
 #[repr(transparent)]
 #[derive(Default, Hash, Debug)]
 pub struct Blueprints<'bound>(BTreeMap<UniqueHashId<Type>, Vec<Blueprint<'bound>>>);
-
 
 /// Only use this for modifying methods trait generics. Should probably
 /// use visit_mut more often..
@@ -101,8 +97,6 @@ struct MonomorphizeTraitBound<'poly>(&'poly BTreeMap<Ident, &'poly Type>);
 ///                                        
 /// ```
 struct RemoveBoundBindings;
-
-
 
 /// FIXME: USE VISITER PATTERN INSTEAD.
 impl<'bound> Blueprint<'bound> {
@@ -235,10 +229,7 @@ impl<'bound> Blueprint<'bound> {
         RemoveBoundBindings.visit_trait_bound_mut(&mut tb);
         tb
     }
-
-
 }
-
 
 impl<'bound> Blueprint<'bound> {
     /// Used to extract all bindings in a trait bound
@@ -354,8 +345,6 @@ impl<'bound> From<&'bound TraitBound> for Blueprint<'bound> {
     }
 }
 
-
-
 impl<'bound> Blueprints<'bound> {
     pub fn for_each_blueprint(&self, mut f: impl FnMut(&Blueprint)) {
         self.0.iter().for_each(|m| m.1.iter().for_each(&mut f))
@@ -375,7 +364,6 @@ impl<'bound> DerefMut for Blueprints<'bound> {
         self.0.borrow_mut()
     }
 }
-
 
 impl VisitMut for MonomorphizeFnSignature<'_> {
     /// Skip mutating generic parameter in method signature

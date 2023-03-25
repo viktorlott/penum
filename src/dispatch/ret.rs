@@ -1,8 +1,8 @@
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use syn::ExprMacro;
-use syn::spanned::Spanned;
 use syn::parse_str;
+use syn::spanned::Spanned;
+use syn::ExprMacro;
 use syn::Type;
 
 // This is kind of a redundant solution..

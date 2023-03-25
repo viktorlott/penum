@@ -250,6 +250,7 @@ impl Penum<Disassembled> {
                         for blueprint in blueprints.iter_mut() {
                             blueprint.attach(&variant_sig)
                         }
+
                         // FIXME: This will only work for nullary type
                         // constructors.
                     } else if pat_field.ty.is_placeholder() {
@@ -341,6 +342,7 @@ impl Penum<Assembled> {
                             for (_, ty_id) in pty_set.iter().enumerate() {
                                 let ty = &**ty_id;
 
+                                // Could remove this.
                                 let spanned_bounds = pred
                                     .bounds
                                     .to_token_stream()

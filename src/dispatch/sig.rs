@@ -2,21 +2,20 @@ use std::ops::Deref;
 
 use proc_macro2::Span;
 
-use syn::Signature;
-use syn::Pat;
-use syn::FnArg;
+use syn::parse_quote_spanned;
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token;
 use syn::token::Comma;
-use syn::punctuated::Punctuated;
 use syn::Arm;
-use syn::TraitItemMethod;
-use syn::parse_quote_spanned;
 use syn::Field;
+use syn::FnArg;
 use syn::Ident;
+use syn::Pat;
+use syn::Signature;
+use syn::TraitItemMethod;
 
 use quote::ToTokens;
-
 
 pub struct VariantSignature<'info> {
     enum_ident: &'info Ident,
@@ -67,8 +66,6 @@ impl<'a> Position<'a> {
     }
 }
 
-
-
 impl<'info> VariantSignature<'info> {
     pub fn new(
         enum_ident: &'info Ident,
@@ -109,7 +106,6 @@ impl<'info> VariantSignature<'info> {
         )
     }
 }
-
 
 impl<'a> Position<'a> {
     /// We use this to format the call signature of the variant. It
@@ -178,7 +174,7 @@ impl ToTokens for Param {
 fn sanitize(inputs: &Punctuated<FnArg, Comma>) -> Punctuated<Pat, Comma> {
     let mut san = Punctuated::new();
     let max = inputs.len();
-    
+
     inputs.iter().enumerate().for_each(|(i, arg)| match arg {
         syn::FnArg::Receiver(_) => (),
         syn::FnArg::Typed(typed) => {
