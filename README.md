@@ -16,45 +16,36 @@
     </a>
 </div>
 
-`penum` is a procedural macro that is used to make an enum conform to a
-given pattern that can include generics with trait bounds, which then
-allows for `static dispatching`. It's a tool for asserting how enums
-should look and behave through simple expressive rust grammar.
+`penum` is a procedural macro that is used for **enum conformity** and
+**automatic dispatch**. This is done by specifying a declarative pattern
+that express how we should interprete the enum. It's a tool for
+asserting how enums should **look** and **behave** through simple
+expressive rust grammar.
 
-- **Patterns** — can be thought of as a toy shape sorter, where the enum
-  variants are shapes that are trying to fit the given pattern we've
-  expressed. There are 3 shapes to choose from, *tuples* `()`, *structs*
-  `{}` and *units*. 
+- **Patterns** — can be thought of as a *toy shape sorter* that sorts
+  through enum variants and makes sure they fit. So each variant has a
+  certain shape that must satisfy the patterns we've specified. There
+  are 3 shapes to choose from, *tuples* `()`, *structs* `{}` and
+  *units*.
 
-- **Trait bounds** — are used in combination with *generic parameters*
-  to assert what the matched variants field types should implement, and
-  can be expressed like this, `where T: Trait<Type>`. The *generic
-  parameters* actually needs to be introduced inside a pattern fragment. 
+- **Predicates** — are used in combination with *patterns* to assert
+  what the matched variants field types should implement. They can be
+  expressed like a regular where clause, e.g `where T: Trait<Type>`. The
+  *generic parameters* actually needs to be introduced inside a pattern
+  fragment.
 
-- **Smart dispatch** — lets us express how an enum should behave in
+- **Smart dispatch** — lets us express how an enum should **behave** in
   respect to its variants. The symbol that is used to express this is
   `^` and should be put infront of the trait you wish to be dispatched,
-  e.g. `(T) where T: ^AsRef<str>`. This is currently limited to rust std
-  and core library traits, but there's plans to extend support for
-  custom trait definitions soon. Methods with `Option`, `String`, and
-  other `Default` return types will be automatically returned for
-  variants that doesn't have a field satifying the dispatch trait
-  
-- **Impls** — can be seen as a shorthand for *a concrete type that
-  implements this trait*, and are primarily used as a substitute for
-  regular *generic trait bound expressions*. They look something like
-  this, `(impl Copy, impl Copy) | {name: impl Clone}`
-  
-- **Placeholders** — are single unbounded wildcards, or if you are
-  familiar with rust, it's the underscore `_` identifier and usually
-  means that something is ignored, which means that they will satisfy
-  any type `(_, _) | {num: _}`.
-  
-- **Variadic** — are similar to placeholders, but instead of only being
-  able to substitute one type, variadics can be substituted by 0 or more
-  types. Like placeholders, they are a way to express that we don't care
-  about the rest of the parameters in a pattern. The look something like
-  this`(T, U, ..) | {num: T, ..}`
+  e.g. `(T) where T: ^AsRef<str>`. The dispatcher is smart enought to
+  figure out certain return types for methods such that non-matching
+  variants can be assigned with a *default* return statement. i.e types
+  like `Option<_>`, `Result<_, E>` and many other types (*including
+  Primitive Types*) can get defaulted automatically for us instead of
+  returning them with a panic. 
+
+  *This is currently limited to rust std library traits, but there's
+  plans to extend support for custom trait definitions soon.*
 
 *Allowing developers to assert how an enum should look and behave.*
 
@@ -92,10 +83,38 @@ Here's how it would look like if we wanted to dispatch a trait.
 `Penum` is smart enough to infer certain return types for non-matching
 variants. e.g `Option<T>`, `&Option<T>`, `String`, `&str`. It can even
 handle `&String`, referenced non-const types. The goal is to support any
-type that implemented `Default`.
+type, which we could potentially do by checking for types implementing
+the `Default` trait.
 
 Note, when dispatching traits with associated types, it's important to
 declare them. e.g `Add<i32, Output = i32>`.
+
+<details>
+<summary>Under development</summary>
+
+For non-std types we rely on the `Default` trait, which means, if we can
+prove that a type implements `Default` we can automatically add them as
+return types for non-matching variants,
+
+</details>
+
+  
+**Impls** — can be seen as a shorthand for *a concrete type that
+implements this trait*, and are primarily used as a substitute for
+regular *generic trait bound expressions*. They look something like
+this, `(impl Copy, impl Copy) | {name: impl Clone}`
+  
+**Placeholders** — are single unbounded wildcards, or if you are
+familiar with rust, it's the underscore `_` identifier and usually
+means that something is ignored, which means that they will satisfy
+any type `(_, _) | {num: _}`.
+  
+**Variadic** — are similar to placeholders, but instead of only being
+able to substitute one type, variadics can be substituted by 0 or more
+types. Like placeholders, they are a way to express that we don't care
+about the rest of the parameters in a pattern. The look something like
+this`(T, U, ..) | {num: T, ..}`.
+
 
 ### Trivial example:
 Here we have an enum with one unary and one binary tuple variant where
