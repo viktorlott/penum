@@ -1,20 +1,23 @@
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use syn::{parse_str, spanned::Spanned, ExprMacro, Type};
+use syn::ExprMacro;
+use syn::spanned::Spanned;
+use syn::parse_str;
+use syn::Type;
 
 // This is kind of a redundant solution..
 fn static_return<T: ToTokens + Spanned>(ty: &T) -> TokenStream {
     quote::quote_spanned!(ty.span()=>
         {
             use std::cell::UnsafeCell;
-            struct Static<T: Default, F = fn() -> T>(UnsafeCell<Option<T>>, F);
+            struct Static<T: Default>(UnsafeCell<Option<T>>);
             unsafe impl<T: Default> Sync for Static<T> {}
             impl<T: Default> Static<T> {
                 pub const fn new() -> Self {
-                    Self(UnsafeCell::new(None), || T::default())
+                    Self(UnsafeCell::new(None))
                 }
                 fn get(&self) -> &'static T {
-                    unsafe { &mut *self.0.get() }.get_or_insert_with(self.1)
+                    unsafe { &mut *self.0.get() }.get_or_insert_with(|| T::default())
                 }
             }
             static RETURN: Static<#ty> = Static::new();
@@ -26,7 +29,7 @@ fn static_return<T: ToTokens + Spanned>(ty: &T) -> TokenStream {
 // We could use Visit pattern here, but it was easier to do it like
 // this.
 pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
-    let mut ctx = TokenStream::new();
+    let mut tokens = TokenStream::new();
     let mut is_ref = false;
     loop {
         match ty {
@@ -49,7 +52,7 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
 
                 is_ref = true;
 
-                ctx.extend(quote::quote!(&));
+                tokens.extend(quote::quote!(&));
                 ty = &*ty_ref.elem;
             }
 
@@ -70,8 +73,8 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
                 if let Some(path_seg) = path.path.segments.last() {
                     match path_seg.ident.to_string().as_str() {
                         "Option" => {
-                            ctx.extend(quote::quote!(None));
-                            return Some(ctx);
+                            tokens.extend(quote::quote!(None));
+                            return Some(tokens);
                         }
                         "str" => return Some(quote::quote!("")),
                         "String" => {
@@ -109,9 +112,9 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
                     }
                 }
 
-                ctx.extend(quote::quote!((#group)));
+                tokens.extend(quote::quote!((#group)));
 
-                return Some(ctx);
+                return Some(tokens);
             }
             // Some `Type`s can't even be considered as valid return
             // types.

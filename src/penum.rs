@@ -227,7 +227,9 @@ impl Penum<Disassembled> {
                             .polymap_insert(pat_ty_unique.clone(), item_ty_unique);
 
                         // 3. Dispachable list
-                        let Some(blueprints) = maybe_blueprints.as_mut().and_then(|bp| bp.get_mut(&pat_ty_unique)) else {
+                        let Some(blueprints) = maybe_blueprints
+                                .as_mut()
+                                .and_then(|bp| bp.get_mut(&pat_ty_unique)) else {
                             continue
                         };
 
@@ -251,14 +253,9 @@ impl Penum<Disassembled> {
                         // FIXME: This will only work for nullary type
                         // constructors.
                     } else if pat_field.ty.is_placeholder() {
-                        // Because we don't extend the enum where clause
-                        // anymore, we need to save the fields that
-                        // match on placeholder so that we can assert
-                        // predicates on fields that might not implement
-                        // to trait bound.
                         self.types
                             .polymap_insert(item_ty_unique.clone(), item_ty_unique);
-                    } else if item_ty_string.eq(&pat_ty_string) {
+                    } else if item_ty_unique.eq(&pat_ty_unique) {
                         self.types.polymap_insert(
                             pat_ty_unique, // PATTERN
                             item_ty_unique,

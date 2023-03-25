@@ -108,48 +108,58 @@ fn create_traits_from(base: &str) {
                 .as_str();
 
             names.push(trait_ident.to_string());
-            traits.push(fmtd_code.clone());
-
-            let file = File::create(format!("../src/dispatch/{}/{}.rs", base, trait_ident));
-            file.unwrap()
-                .write_all(&fmtd_code.into_bytes())
-                .expect("write file");
+            traits.push(fmtd_code);
         });
+        
+        let enum_name = "StandardTrait";
+        let enum_variants = names.join(",");
+        let from_enum_to_item = names.iter().zip(traits.iter()).map(|(name, trt)| format!("{enum_name}::{name} => parse_quote!(\n{})", trt.replace('\n', ""))).collect::<Vec<_>>().join(",");
+        let from_str_to_enum = names.iter().map(|name| format!("\"{name}\" => Self::{name}")).collect::<Vec<_>>().join(",");
+        
+        let template = format_code(format!(include_str!("template.md"), enum_name = enum_name, enum_variants = enum_variants, from_enum_to_item = from_enum_to_item, from_str_to_enum = from_str_to_enum));
 
-    let core_enum = format_code(format!("enum Core {{ {} }}", names.join(",")));
 
-    let impl_from_str = format_code(format!(
-        "impl FromStr for Core {{ fn from_str(value: &str) -> Self {{ match value {{  {}  }} }} }}",
-        names
-            .iter()
-            .map(|n| { format!("\"{}\" => Self::{}", n, n) })
-            .collect::<Vec<_>>()
-            .join(",")
-    ));
 
-    let impl_from_enum = format_code(format!(
-        "impl From<Core> for Dispatcher<ItemTrait> {{ fn from(value: Core) -> Self {{ match value {{  {}  }} }} }}",
-        names.iter()
-            .map(|n| { format!("Self::{} => parse_quote!(include!(\"./std/{}.rs\"))", n, n) })
-            .collect::<Vec<_>>()
-            .join(",")
-    ));
+        let file = File::create("./trait.rs");
 
-    let file = File::create("../src/dispatch/std.rs");
-    let file2 = File::create("../src/dispatch/transform.rs");
-    let file3 = File::create("../src/dispatch/enum.rs");
+        file.unwrap()
+            .write_all(&template.into_bytes())
+            .expect("write file");
+    
+    // let core_enum = format_code(format!("enum Core {{ {} }}", names.join(",")));
 
-    file.unwrap()
-        .write_all(&impl_from_enum.into_bytes())
-        .expect("write file");
-    file2
-        .unwrap()
-        .write_all(&impl_from_str.into_bytes())
-        .expect("write file");
-    file3
-        .unwrap()
-        .write_all(&core_enum.into_bytes())
-        .expect("write file");
+    // let impl_from_str = format_code(format!(
+    //     "impl FromStr for Core {{ fn from_str(value: &str) -> Self {{ match value {{  {}  }} }} }}",
+    //     names
+    //         .iter()
+    //         .map(|n| { format!("\"{}\" => Self::{}", n, n) })
+    //         .collect::<Vec<_>>()
+    //         .join(",")
+    // ));
+
+    // let impl_from_enum = format_code(format!(
+    //     "impl From<Core> for Dispatcher<ItemTrait> {{ fn from(value: Core) -> Self {{ match value {{  {}  }} }} }}",
+    //     names.iter()
+    //         .map(|n| { format!("Self::{} => parse_quote!(include!(\"./std/{}.rs\"))", n, n) })
+    //         .collect::<Vec<_>>()
+    //         .join(",")
+    // ));
+
+    // let file = File::create("../src/dispatch/std.rs");
+    // let file2 = File::create("../src/dispatch/transform.rs");
+    // let file3 = File::create("../src/dispatch/enum.rs");
+
+    // file.unwrap()
+    //     .write_all(&impl_from_enum.into_bytes())
+    //     .expect("write file");
+    // file2
+    //     .unwrap()
+    //     .write_all(&impl_from_str.into_bytes())
+    //     .expect("write file");
+    // file3
+    //     .unwrap()
+    //     .write_all(&core_enum.into_bytes())
+    //     .expect("write file");
 }
 
 fn main() {
