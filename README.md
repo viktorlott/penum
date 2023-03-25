@@ -43,12 +43,25 @@ should look and behave.*
   variants can be assigned with a *default* return statement. i.e types
   like `Option<_>`, `Result<_, E>` and many other types (*including
   Primitive Types*) can get defaulted automatically for us instead of
-  returning them with a panic. ([read
-  more](https://github.com/viktorlott/penum/blob/main/docs/static-dispatch.md))
+  returning them with a panic. *This is currently limited to rust std
+  library traits, but there's plans to extend support for custom trait
+  definitions soon.*
 
-  *This is currently limited to rust std library traits, but there's
-  plans to extend support for custom trait definitions soon.*
+- **Impls** — can be seen as a shorthand for *a concrete type that
+  implements this trait*, and are primarily used as a substitute for
+  regular *generic trait bound expressions*. They look something like
+  this, `(impl Copy, impl Copy) | {name: impl Clone}`
 
+- **Placeholders** — are single unbounded wildcards, or if you are
+  familiar with rust, it's the underscore `_` identifier and usually
+  means that something is ignored, which means that they will satisfy
+  any type `(_, _) | {num: _}`.
+
+- **Variadic** — are similar to placeholders, but instead of only being
+  able to substitute one type, variadics can be substituted by 0 or more
+  types. Like placeholders, they are a way to express that we don't care
+  about the rest of the parameters in a pattern. The look something like
+  this`(T, U, ..) | {num: T, ..}`.
 
 ## Installation
 This crate is available on [crates.io](https://crates.io/crates/penum)
@@ -93,24 +106,6 @@ prove that a type implements `Default` we can automatically add them as
 return types for non-matching variants,
 
 </details>
-
-
-- **Impls** — can be seen as a shorthand for *a concrete type that
-  implements this trait*, and are primarily used as a substitute for
-  regular *generic trait bound expressions*. They look something like
-  this, `(impl Copy, impl Copy) | {name: impl Clone}`
-
-- **Placeholders** — are single unbounded wildcards, or if you are
-  familiar with rust, it's the underscore `_` identifier and usually
-  means that something is ignored, which means that they will satisfy
-  any type `(_, _) | {num: _}`.
-
-- **Variadic** — are similar to placeholders, but instead of only being
-  able to substitute one type, variadics can be substituted by 0 or more
-  types. Like placeholders, they are a way to express that we don't care
-  about the rest of the parameters in a pattern. The look something like
-  this`(T, U, ..) | {num: T, ..}`.
-
 
 ### Trivial example:
 Here we have an enum with one unary and one binary tuple variant where
