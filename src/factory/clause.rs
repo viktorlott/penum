@@ -47,6 +47,7 @@ pub struct TraitBound {
 }
 
 impl TypeParamBound {
+    /// FIXME: Only get methods with receivers. `fn method()` vs `fn method(&self)`.
     pub fn get_dispatchable_trait_bound(&self) -> Option<&TraitBound> {
         match self {
             TypeParamBound::Trait(tb) => tb.dispatch.map(|_| tb),

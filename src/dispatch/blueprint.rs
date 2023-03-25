@@ -205,6 +205,8 @@ impl<'bound> Blueprint<'bound> {
                 continue
             };
 
+            // FIXME: FILTER RECEIVER METHODS.
+
             let (method_name, parsed_arm) = variant_sig.parse_arm(method);
 
             if let Some(arm_vec) = arms.get_mut(method_name) {
