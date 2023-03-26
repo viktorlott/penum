@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use proc_macro::{TokenStream};
+use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
 use factory::{PenumExpr, Subject};
@@ -11,7 +11,6 @@ mod error;
 mod factory;
 mod penum;
 mod utils;
-
 
 /// Use this to make an enum conform to a pattern with or without trait
 /// bounds.
@@ -78,7 +77,6 @@ pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as Subject);
 
     let penum = Penum::from(pattern, input).assemble();
-
 
     // Loop through enum definition and match each variant with each
     // shape pattern. for each variant => pattern.find(variant)

@@ -8,9 +8,6 @@ use syn::PathArguments;
 use syn::Type;
 
 /// This is kind of a redundant solution..
-/// 
-/// To support 
-
 fn static_return<T: ToTokens + Spanned>(ty: &T) -> TokenStream {
     quote::quote_spanned!(ty.span()=>
         {
@@ -23,6 +20,27 @@ fn static_return<T: ToTokens + Spanned>(ty: &T) -> TokenStream {
                     Self(UnsafeCell::new(None), Once::new())
                 }
                 fn get(&self) -> &'static T {
+                    // SAFETY: Firstly, this static isn't available to
+                    //         the user directly because it's scoped and
+                    //         is only generated through macro expansion
+                    //         at return positions. Secondly, the type
+                    //         we are returning is an immutable static
+                    //         reference which means that it's not
+                    //         possible to mutate it directly, unless
+                    //         the user has an interior mutability type.
+                    //         It's up to the user to make sure that T
+                    //         doesn't contain any unsound datastructure
+                    //         that would break this implementation.
+                    //         Note that T needs to implement Default.
+                    //         Thirdly, this type is meant to return
+                    //         non-const reference types, so to make
+                    //         this work we have to do a lazy
+                    //         initialization, which means that it needs
+                    //         to be thread safe. This is done through a
+                    //         sync primitive that ensures us that it
+                    //         can only be initialized once, and that
+                    //         other threads are blocked from reading it
+                    //         if it's being written to.
                     self.1.call_once(|| unsafe { *self.0.get() = Some(T::default()) });
                     unsafe { (*self.0.get()).as_ref().unwrap_unchecked() }
                 }
@@ -33,9 +51,8 @@ fn static_return<T: ToTokens + Spanned>(ty: &T) -> TokenStream {
     )
 }
 
-// We could use Visit pattern here, but it was easier to do it like
-// this.
-// TODO: Refactor please
+// We could use Visitor pattern here, but it was easier to do it like
+// this. TODO: Refactor please
 pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
     let mut tokens = TokenStream::new();
     let mut is_ref = false;
@@ -81,7 +98,8 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
                         "Result" => {
                             if let PathArguments::AngleBracketed(ref abga) = path_seg.arguments {
                                 if let Some(GenericArgument::Type(err_ty)) = abga.args.last() {
-                                    // FIXME: Search `err_ty` and check if it implements Default.
+                                    // FIXME: Search `err_ty` and check
+                                    // if it implements Default.
                                     if let Some(toks) = handle_default_ret_type(err_ty) {
                                         tokens.extend(quote::quote!(Err(#toks)));
                                         return Some(tokens);

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 extern crate penum;
-use penum::{ penum};
+use penum::penum;
 trait Trait {}
 trait Trait2 {}
 trait Trait3 {}
@@ -21,16 +21,11 @@ struct A<T>(T);
 
 impl<T> Trait for A<T> {}
 
-
-
 #[penum((T) where T: Copy)]
 enum Foo {
     Bar(i32),
     Bor(i32),
 }
-
-
-
 
 enum Opt<T> {
     Some(T),
