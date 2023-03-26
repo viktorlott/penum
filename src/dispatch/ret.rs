@@ -7,19 +7,24 @@ use syn::GenericArgument;
 use syn::PathArguments;
 use syn::Type;
 
-// This is kind of a redundant solution..
+/// This is kind of a redundant solution..
+/// 
+/// To support 
+
 fn static_return<T: ToTokens + Spanned>(ty: &T) -> TokenStream {
     quote::quote_spanned!(ty.span()=>
         {
             use std::cell::UnsafeCell;
-            struct Static<T: Default>(UnsafeCell<Option<T>>);
+            use std::sync::Once;
+            struct Static<T: Default>(UnsafeCell<Option<T>>, Once);
             unsafe impl<T: Default> Sync for Static<T> {}
             impl<T: Default> Static<T> {
                 pub const fn new() -> Self {
-                    Self(UnsafeCell::new(None))
+                    Self(UnsafeCell::new(None), Once::new())
                 }
                 fn get(&self) -> &'static T {
-                    unsafe { &mut *self.0.get() }.get_or_insert_with(|| T::default())
+                    self.1.call_once(|| unsafe { *self.0.get() = Some(T::default()) });
+                    unsafe { (*self.0.get()).as_ref().unwrap_unchecked() }
                 }
             }
             static RETURN: Static<#ty> = Static::new();
@@ -238,7 +243,7 @@ mod tests {
         let ty: Type = parse_quote!(&String);
         let result = handle_default_ret_type(&ty).expect("to parse").to_string();
 
-        assert_eq!("{ use std :: cell :: UnsafeCell ; struct Static < T : Default > (UnsafeCell < Option < T >>) ; unsafe impl < T : Default > Sync for Static < T > { } impl < T : Default > Static < T > { pub const fn new () -> Self { Self (UnsafeCell :: new (None)) } fn get (& self) -> & 'static T { unsafe { & mut * self . 0 . get () } . get_or_insert_with (|| T :: default ()) } } static RETURN : Static < String > = Static :: new () ; RETURN . get () }", result.as_str())
+        assert_eq!("{ use std :: cell :: UnsafeCell ; use std :: sync :: Once ; struct Static < T : Default > (UnsafeCell < Option < T >> , Once) ; unsafe impl < T : Default > Sync for Static < T > { } impl < T : Default > Static < T > { pub const fn new () -> Self { Self (UnsafeCell :: new (None) , Once :: new ()) } fn get (& self) -> & 'static T { self . 1 . call_once (|| unsafe { * self . 0 . get () = Some (T :: default ()) }) ; unsafe { (* self . 0 . get ()) . as_ref () . unwrap_unchecked () } } } static RETURN : Static < String > = Static :: new () ; RETURN . get () }", result.as_str())
     }
 
     #[test]

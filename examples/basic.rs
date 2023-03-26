@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 extern crate penum;
-
+use penum::{ penum};
 trait Trait {}
 trait Trait2 {}
 trait Trait3 {}
@@ -21,10 +21,16 @@ struct A<T>(T);
 
 impl<T> Trait for A<T> {}
 
-pub trait AbcTrait {
-    fn a(&self) -> Option<i32>;
-    fn b(&self) -> &Option<i32>;
+
+
+#[penum((T) where T: Copy)]
+enum Foo {
+    Bar(i32),
+    Bor(i32),
 }
+
+
+
 
 enum Opt<T> {
     Some(T),
@@ -65,19 +71,23 @@ impl Abc {
     }
 
     fn f(&self) -> &String {
+        thread_local! {}
         {
-            use std::cell::UnsafeCell;
+            use core::cell::UnsafeCell;
+            use std::sync::Once;
             struct Static<T: Default, F = fn() -> T>(UnsafeCell<Option<T>>, F);
             unsafe impl<T: Default> Sync for Static<T> {}
+            static RETURN: Static<String> = Static::new();
             impl<T: Default> Static<T> {
                 pub const fn new() -> Self {
                     Self(UnsafeCell::new(None), || T::default())
                 }
                 fn get(&self) -> &'static T {
-                    unsafe { &mut *self.0.get() }.get_or_insert_with(self.1)
+                    static INIT: Once = Once::new();
+                    INIT.call_once(|| unsafe { *self.0.get() = Some(self.1()) });
+                    unsafe { (*self.0.get()).as_ref().unwrap_unchecked() }
                 }
             }
-            static RETURN: Static<String> = Static::new();
             RETURN.get()
         }
     }
@@ -88,5 +98,5 @@ fn main() {
 
     let m = x.f();
 
-    println!("{}", m);
+    println!("wewewe {}", m);
 }
