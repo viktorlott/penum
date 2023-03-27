@@ -18,7 +18,7 @@
 
 `penum` is a procedural macro that is used for **enum conformity** and
 **automatic dispatch**. This is done by specifying a declarative pattern
-that express how we should interprete the enum. It's a tool for
+that expresses how we should interpret the enum. It's a tool for
 asserting how enums should **look** and **behave** through simple
 expressive rust grammar.
 
@@ -31,19 +31,19 @@ expressive rust grammar.
 - **Predicates** — are used in combination with *patterns* to assert
   what the matched variants field types should implement. They can be
   expressed like a regular where clause, e.g `where T: Trait<Type>`. The
-  *generic parameters* actually needs to be introduced inside a pattern
+  *generic parameters* needs to be introduced inside a pattern
   fragment.
 
 - **Smart dispatch** — lets us express how an enum should **behave** in
   respect to its variants. The symbol that is used to express this is
-  `^` and should be put infront of the trait you wish to be dispatched,
-  e.g. `(T) where T: ^AsRef<str>`. The dispatcher is smart enought to
+  `^` and should be put in front of the trait you wish to be dispatched,
+  e.g. `(T) where T: ^AsRef<str>`. The dispatcher is smart enough to
   figure out certain return types for methods such that non-matching
   variants can be assigned with a *default* return statement. i.e types
   like `Option<_>`, `Result<_, E>` and many other types (*including
   Primitive Types*) can get defaulted automatically for us instead of
-  returning them with a panic. *This is currently limited to rust std
-  library traits, but there's plans to extend support for custom trait
+  returning them with panic. *This is currently limited to rust std
+  library traits, but there are plans to extend support for custom trait
   definitions soon.*
 
 - **Impls** — can be seen as a shorthand for *a concrete type that
@@ -110,7 +110,7 @@ return types for non-matching variants,
 Here we have an enum with one unary and one binary tuple variant where
 the field type `Storage` and `Something` implements the trait `Trait`.
 The goal is to be able to call the trait `method` through `Foo`. This
-can be accomplished automatically marking the trait with a dispatch
+can be accomplished automatically by marking the trait with a dispatch
 symbol `^`.
 ```rust
 #[penum{ unit | (T) | (_, T) where T: ^Trait }]
