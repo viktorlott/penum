@@ -41,11 +41,11 @@ pub struct Assembled;
 /// It contains everything we need to construct our dispatcher and
 /// pattern validator.
 pub struct Penum<State = Disassembled> {
-    pub expr: PenumExpr,
-    pub subject: Subject,
-    pub error: Diagnostic,
-    pub types: PolymorphicMap<UniqueHashId<Type>, UniqueHashId<Type>>,
-    pub impls: Vec<ItemImpl>,
+    expr: PenumExpr,
+    subject: Subject,
+    error: Diagnostic,
+    types: PolymorphicMap<UniqueHashId<Type>, UniqueHashId<Type>>,
+    impls: Vec<ItemImpl>,
     _marker: PhantomData<State>,
 }
 
@@ -79,11 +79,11 @@ impl Penum<Disassembled> {
             // commonly used props.
             let comparable_pats: ComparablePats = self.expr.borrow().into();
 
-            // We pre-check for clause because we might be needing this
+            // We pre-check our clause because we might be needing this
             // during the dispatch step. Should add
             // `has_dispatchable_member` maybe? let has_clause =
             // self.expr.has_clause(); Turn into iterator instead?
-            let mut maybe_blueprints = self.expr.get_blueprints();
+            let mut maybe_blueprint_map = self.expr.get_blueprints(&mut self.error);
 
             // Expecting failure like `variant doesn't match shape`,
             // hence pre-calling.
@@ -163,6 +163,19 @@ impl Penum<Disassembled> {
                     let item_ty_string = item_field.ty.get_string();
                     let item_ty_unique = UniqueHashId(item_field.ty.clone());
 
+                    // FIXME: We are only expecting one dispatch per
+                    // generic now, so CHANGE THIS WHEN POSSIBLE:
+                    // where T: ^Trait, T: ^Mate -> only ^Trait will
+                    // be found. :( Fixed? where T: ^Trait + ^Mate
+                    // -> should be just turn this into a poly map
+                    // instead?
+                    let variant_sig = VariantSignature::new(
+                        enum_ident,
+                        variant_ident,
+                        item_field,
+                        max_fields_len,
+                    );
+
                     if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
                         let bounds = &ty_impl_trait.bounds;
 
@@ -220,43 +233,35 @@ impl Penum<Disassembled> {
                         && pat_ty_string.to_uppercase().eq(&pat_ty_string);
 
                     if is_generic {
+                        // 3. Dispachable list
+                        if let Some(blueprints) = maybe_blueprint_map.as_mut() {
+                            blueprints.find_and_attach(&pat_ty_unique, &variant_sig);
+                            blueprints.find_and_attach(&item_ty_unique, &variant_sig);
+                        };
+
                         // First we check if pty (T) exists in
                         // polymorphicmap. If it exists, insert new
                         // concrete type.
                         self.types
-                            .polymap_insert(pat_ty_unique.clone(), item_ty_unique);
+                            .polymap_insert(pat_ty_unique.clone(), item_ty_unique.clone());
 
-                        // 3. Dispachable list
-                        let Some(blueprints) = maybe_blueprints
-                                .as_mut()
-                                .and_then(|bp| bp.get_mut(&pat_ty_unique)) else {
-                            continue
-                        };
-
-                        // FIXME: We are only expecting one dispatch per
-                        //        generic now, so CHANGE THIS WHEN
-                        //        POSSIBLE: where T: ^Trait, T: ^Mate ->
-                        //        only ^Trait will be found. :( Fixed?
-                        //        where T: ^Trait + ^Mate   -> should be
-                        //        just turn this into a poly map
-                        //        instead?
-                        let variant_sig = VariantSignature::new(
-                            enum_ident,
-                            variant_ident,
-                            item_field,
-                            max_fields_len,
-                        );
-
-                        for blueprint in blueprints.iter_mut() {
-                            blueprint.attach(&variant_sig)
-                        }
+                        self.types
+                            .polymap_insert(item_ty_unique.clone(), item_ty_unique.clone());
 
                         // FIXME: This will only work for nullary type
                         // constructors.
                     } else if pat_field.ty.is_placeholder() {
+                        if let Some(blueprints) = maybe_blueprint_map.as_mut() {
+                            blueprints.find_and_attach(&item_ty_unique, &variant_sig);
+                        }
                         self.types
                             .polymap_insert(item_ty_unique.clone(), item_ty_unique);
                     } else if item_ty_unique.eq(&pat_ty_unique) {
+                        // 3. Dispachable list
+                        if let Some(blueprints) = maybe_blueprint_map.as_mut() {
+                            blueprints.find_and_attach(&item_ty_unique, &variant_sig);
+                        }
+
                         self.types.polymap_insert(
                             pat_ty_unique, // PATTERN
                             item_ty_unique,
@@ -271,7 +276,7 @@ impl Penum<Disassembled> {
             }
 
             // Assemble all our impl statements
-            if let Some(bp_map) = maybe_blueprints {
+            if let Some(bp_map) = maybe_blueprint_map {
                 bp_map.for_each_blueprint(|bp| {
                     let path = bp.get_sanatized_impl_path();
                     let methods = bp.get_associated_methods();
@@ -348,9 +353,10 @@ impl Penum<Assembled> {
                                     .to_token_stream()
                                     .into_iter()
                                     .map(|mut token| {
-                                        // This is the only way we can
-                                        // change the span of a
-                                        // `bound`..
+                                        // NOTE: This is the only way we can
+                                        // change the span of a `bound`..
+                                        // FIXES: tests/ui/placeholder_with_bound.rs
+                                        // FIXES: tests/ui/trait-bound-not-satisfied.rs
                                         token.set_span(ty.span());
                                         token
                                     })

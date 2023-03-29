@@ -1,0 +1,5 @@
+error: `Trait` cannot be found. Make sure the trait is tagged with the `#[penum]` attribute, and is invoked before your enum.
+ --> tests/ui/dipatch-trait-wrong-order.rs:5:24
+  |
+5 | #[penum[ (T) where T: ^Trait ]]
+  |                        ^^^^^

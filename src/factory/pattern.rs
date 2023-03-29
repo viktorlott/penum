@@ -1,5 +1,6 @@
 use syn::{
     punctuated::{Iter, Punctuated},
+    spanned::Spanned,
     token, ExprRange, Field, Ident, Token,
 };
 
@@ -7,6 +8,7 @@ use quote::ToTokens;
 
 use crate::{
     dispatch::{Blueprint, Blueprints},
+    error::Diagnostic,
     utils::UniqueHashId,
 };
 
@@ -23,6 +25,7 @@ mod to_tokens;
 /// ^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^
 /// <Pattern>           <clause>
 /// ```
+#[derive(Default)]
 pub struct PenumExpr {
     /// Used for matching against incoming variants
     pub pattern: Vec<PatFrag>,
@@ -144,41 +147,38 @@ impl PenumExpr {
     }
 
     /// This should probably be refactored...
-    pub fn get_blueprints(&self) -> Option<Blueprints> {
-        if self.has_predicates() {
-            let mut polymap: Blueprints = Default::default();
+    pub fn get_blueprints(&self, error: &mut Diagnostic) -> Option<Blueprints> {
+        let Some(clause) = self.clause.as_ref() else {
+            return None
+        };
 
-            // SAFETY: We can only have predicates if we have a where
-            // clause.
-            unsafe { self.clause.as_ref().unwrap_unchecked() }
-                .predicates
-                .iter()
-                .for_each(|pred| {
-                    if let WherePredicate::Type(pred_ty) = pred {
-                        let mut blueprints: Vec<Blueprint> = pred_ty
-                            .bounds
-                            .iter()
-                            .filter_map(|b| b.get_dispatchable_trait_bound().map(Blueprint::from))
-                            .collect();
+        let mut polymap: Blueprints = Default::default();
 
-                        if blueprints.is_empty() {
-                            return;
-                        }
-
-                        let ty = UniqueHashId(pred_ty.bounded_ty.clone());
-
-                        if let Some(entry) = polymap.get_mut(&ty) {
-                            entry.append(&mut blueprints);
-                        } else {
-                            polymap.insert(ty, blueprints);
+        for pred in clause.predicates.iter() {
+            if let WherePredicate::Type(pred_ty) = pred {
+                let mut blueprints: Vec<Blueprint> = Default::default();
+                for tr in pred_ty.bounds.iter() {
+                    if let Some(dtr) = tr.get_dispatchable_trait_bound() {
+                        match Blueprint::try_from(dtr) {
+                            Ok(blueprint) => blueprints.push(blueprint),
+                            Err(err) => error.extend(dtr.span(), err),
                         }
                     }
-                });
+                }
+                if blueprints.is_empty() {
+                    return None;
+                }
 
-            (!polymap.is_empty()).then_some(polymap)
-        } else {
-            None
+                let ty = UniqueHashId(pred_ty.bounded_ty.clone());
+
+                if let Some(entry) = polymap.get_mut(&ty) {
+                    entry.append(&mut blueprints);
+                } else {
+                    polymap.insert(ty, blueprints);
+                }
+            }
         }
+        (!polymap.is_empty()).then_some(polymap)
     }
 
     pub fn find_predicate(

@@ -2,9 +2,15 @@
 
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
+use syn::ItemTrait;
 
-use factory::{PenumExpr, Subject};
+use factory::PenumExpr;
+use factory::Subject;
+
 use penum::Penum;
+
+use crate::dispatch::T_SHM;
+use crate::penum::Stringify;
 
 mod dispatch;
 mod error;
@@ -73,8 +79,18 @@ mod utils;
 /// ```
 #[proc_macro_attribute]
 pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
-    let pattern = parse_macro_input!(attr as PenumExpr);
+    if attr.is_empty() {
+        let output = input.clone();
+        let item_trait = parse_macro_input!(input as ItemTrait);
+
+        // If we cannot find the trait the user wants to dispatch, we need to store it.
+        T_SHM.insert(item_trait.ident.get_string(), item_trait.get_string());
+
+        return output;
+    }
+
     let input = parse_macro_input!(input as Subject);
+    let pattern = parse_macro_input!(attr as PenumExpr);
 
     let penum = Penum::from(pattern, input).assemble();
 

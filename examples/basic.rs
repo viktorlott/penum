@@ -1,6 +1,6 @@
 #![allow(dead_code)]
-extern crate penum;
 use penum::penum;
+
 trait Trait {}
 trait Trait2 {}
 trait Trait3 {}

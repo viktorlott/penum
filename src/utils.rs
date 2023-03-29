@@ -23,7 +23,7 @@ use crate::{factory::PatFrag, penum::Stringify};
 pub struct PolymorphicMap<K: Hash, V: Hash>(BTreeMap<K, BTreeSet<V>>);
 
 /// Fix these later
-impl<K: Hash, V: Hash> PolymorphicMap<UniqueHashId<K>, UniqueHashId<V>>
+impl<K: Hash + Clone, V: Hash + Clone> PolymorphicMap<UniqueHashId<K>, UniqueHashId<V>>
 where
     UniqueHashId<K>: Ord,
     UniqueHashId<V>: Ord,
@@ -45,7 +45,7 @@ impl<K: Hash, V: Hash> Deref for PolymorphicMap<UniqueHashId<K>, UniqueHashId<V>
     }
 }
 
-#[derive(Hash, Debug, Clone)]
+#[derive(Hash, Debug, Clone, Copy)]
 pub struct UniqueHashId<T: Hash>(pub T);
 
 impl<T: Hash> UniqueHashId<T> {
@@ -192,3 +192,50 @@ mod tests {
         assert_eq!("__Unique_Id_2029180714094036370", ty_string2);
     }
 }
+
+// #[derive(Hash, Debug)]
+// pub struct Hashable<'id, T: Hash>(pub &'id T);
+
+// impl<T: Hash + ToTokens> Eq for Hashable<'_, T> {}
+
+// impl<T: Hash + ToTokens> Ord for Hashable<'_, T> {
+//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+//         self.0.to_token_stream().to_string().cmp(&other.0.to_token_stream().to_string())
+//     }
+// }
+
+// impl<T: Hash + ToTokens> PartialEq for Hashable<'_, T> {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.0.to_token_stream().to_string() == other.0.to_token_stream().to_string()
+//     }
+// }
+
+// impl<T: Hash + ToTokens> PartialOrd for Hashable<'_, T> {
+//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+//         self.0.to_token_stream().to_string()
+//             .partial_cmp(&other.0.to_token_stream().to_string())
+//     }
+// }
+
+// #[derive(Default, Debug)]
+// pub struct PolyMap<'id, T: Hash>(BTreeMap<Hashable<'id, T>, BTreeSet<Hashable<'id, T>>>);
+
+// /// Fix these later
+// impl<'id, T: Hash + ToTokens> PolyMap<'id, T> {
+//     pub fn polymap_insert(&'id mut self, pty: &'id T, ity: &'id T) {
+//         let pty = Hashable(pty);
+//         let ity = Hashable(ity);
+
+//         if let Some(set) = self.0.get_mut(&pty) {
+//             set.insert(ity);
+//         } else {
+//             self.0.insert(pty, vec![ity].into_iter().collect());
+//         }
+//     }
+// }
+
+// fn tester() {
+//     let mut pol = PolyMap::default();
+
+//     pol.polymap_insert(pty, ity)
+// }

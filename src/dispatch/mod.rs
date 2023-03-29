@@ -4,5 +4,9 @@ pub use self::sig::VariantSignature;
 
 mod blueprint;
 mod ret;
+mod shm;
 mod sig;
 mod standard;
+
+/// Storing token streams will cause "use after free" error, so we store them as Strings instead.
+pub static T_SHM: self::shm::SharedMemory<String, String> = self::shm::SharedMemory::new();

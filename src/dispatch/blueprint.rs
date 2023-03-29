@@ -7,6 +7,7 @@ use std::ops::DerefMut;
 use proc_macro2::Ident;
 
 use syn::parse_quote;
+use syn::parse_str;
 use syn::punctuated::Punctuated;
 use syn::visit_mut::visit_angle_bracketed_generic_arguments_mut;
 use syn::visit_mut::visit_type_mut;
@@ -14,6 +15,7 @@ use syn::visit_mut::VisitMut;
 use syn::Arm;
 use syn::Binding;
 use syn::GenericArgument;
+use syn::ItemTrait;
 use syn::Token;
 use syn::TraitBound as SynTraitBound;
 use syn::TraitItem;
@@ -27,6 +29,7 @@ use crate::utils::UniqueHashId;
 
 use super::ret::handle_default_ret_type;
 use super::ret::return_panic;
+use super::T_SHM;
 
 use super::sig::VariantSignature;
 use super::standard::StandardTrait;
@@ -336,20 +339,48 @@ impl<'bound> Blueprint<'bound> {
     }
 }
 
-impl<'bound> From<&'bound TraitBound> for Blueprint<'bound> {
-    fn from(bound: &'bound TraitBound) -> Self {
-        let schematic = StandardTrait::from(bound.get_ident()).into();
-        Self {
-            schematic,
-            bound,
-            methods: Default::default(),
+impl<'bound> TryFrom<&'bound TraitBound> for Blueprint<'bound> {
+    type Error = syn::Error;
+    fn try_from(bound: &'bound TraitBound) -> Result<Self, Self::Error> {
+        let b_name = bound.get_ident();
+
+        if let Ok(schematic) = StandardTrait::try_from(b_name) {
+            Ok(Self {
+                schematic: schematic.into(),
+                bound,
+                methods: Default::default(),
+            })
+        } else if let Some(Ok(schematic)) = T_SHM
+            .find(&b_name.to_string())
+            .as_ref()
+            .map(|result| parse_str::<ItemTrait>(result))
+        {
+            Ok(Self {
+                schematic: TraitSchematic(schematic),
+                bound,
+                methods: Default::default(),
+            })
+        } else {
+            Err(syn::Error::new_spanned(bound, trait_not_found(bound)))
         }
     }
+}
+
+fn trait_not_found(bound: &TraitBound) -> String {
+    format!("`{}` cannot be found. Make sure the trait is tagged with the `#[penum]` attribute, and is invoked before your enum.", bound.get_ident())
 }
 
 impl<'bound> Blueprints<'bound> {
     pub fn for_each_blueprint(&self, mut f: impl FnMut(&Blueprint)) {
         self.0.iter().for_each(|m| m.1.iter().for_each(&mut f))
+    }
+
+    pub fn find_and_attach(&mut self, id: &UniqueHashId<Type>, variant_sig: &VariantSignature) {
+        if let Some(bp_list) = self.get_mut(id) {
+            for blueprint in bp_list.iter_mut() {
+                blueprint.attach(variant_sig)
+            }
+        }
     }
 }
 
