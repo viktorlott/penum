@@ -8,16 +8,19 @@ use syn::{
 mod parse;
 mod to_tokens;
 
+#[derive(Debug)]
 pub struct WhereClause {
     pub where_token: Token![where],
     pub predicates: Punctuated<WherePredicate, Token![,]>,
 }
 
+#[derive(Debug)]
 pub enum WherePredicate {
     Type(PredicateType),
     Lifetime(PredicateLifetime), // NOT SUPPORTED
 }
 
+#[derive(Debug)]
 pub struct PredicateType {
     pub lifetimes: Option<BoundLifetimes>,
     pub bounded_ty: Type,
@@ -25,12 +28,14 @@ pub struct PredicateType {
     pub bounds: Punctuated<TypeParamBound, Token![+]>,
 }
 
+#[derive(Debug)]
 pub struct PredicateLifetime {
     pub lifetime: Lifetime,
     pub colon_token: Token![:],
     pub bounds: Punctuated<Lifetime, Token![+]>,
 }
 
+#[derive(Debug)]
 pub enum TypeParamBound {
     Trait(TraitBound),
     #[allow(dead_code)]

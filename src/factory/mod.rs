@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use std::iter::Zip;
 
+use proc_macro2::Ident;
 use syn::{punctuated::Iter, Field, Fields};
 
 mod clause;
@@ -10,6 +11,8 @@ mod subject;
 pub use clause::*;
 pub use pattern::*;
 pub use subject::*;
+
+use crate::penum::Stringify;
 
 // ComPairAble would be a stupid name
 pub struct ComparablePair<'disc>(
@@ -33,6 +36,9 @@ pub struct Comparable<'disc, T> {
 
     /// The number of arguments in the group.
     arity: usize,
+
+    /// If patfrag has an ident
+    ident: Option<Ident>
 }
 
 /// This is just an intermediate struct to hide some logic behind.
@@ -52,6 +58,9 @@ enum MatchKind {
     /// Nullary matches implies that we satisfy the pattern shape,
     /// and that we don't need to compare inner structure
     Nullary,
+
+    /// Inferred _
+    Inferred,
 
     /// Nothing match
     None,
@@ -108,10 +117,17 @@ impl<'disc> ComparablePair<'disc> {
     }
 
     fn match_kind(&self) -> MatchKind {
-        match (self.0.value, self.1.value) {
-            (&Composite::Named { .. }, &Fields::Named(..))
-            | (&Composite::Unnamed { .. }, &Fields::Unnamed(..)) => MatchKind::Compound,
-            (Composite::Unit, Fields::Unit) => MatchKind::Nullary,
+        match (self.0.value, self.1.value, self.0.ident.as_ref()) {
+            (&Composite::Named { .. }, &Fields::Named(..), _)
+            | (&Composite::Unnamed { .. }, &Fields::Unnamed(..), _) => MatchKind::Compound,
+            (Composite::Unit, Fields::Unit, _) => MatchKind::Nullary,
+            (Composite::Unit, _, Some(ident)) => {
+                if ident.get_string() == "_" {
+                    MatchKind::Inferred
+                } else {
+                    MatchKind::None
+                }
+            },
             _ => MatchKind::None,
         }
     }
@@ -142,6 +158,7 @@ pub fn pattern_match<'a>(
                 }
             }
             MatchKind::Nullary => Some(cmp_pair),
+            MatchKind::Inferred => Some(cmp_pair),
             _ => None,
         }
     }
@@ -158,6 +175,8 @@ mod boilerplate {
 
     impl<'disc> From<&'disc PenumExpr> for ComparablePats<'disc> {
         fn from(value: &'disc PenumExpr) -> Self {
+
+            println!("{:#?}", value.pattern);
             Self(
                 value
                     .pattern
@@ -180,6 +199,18 @@ mod boilerplate {
                 value,
                 variadic: value.get_variadic_position(),
                 arity: value.len(),
+                ident: None,
+            }
+        }
+    }
+
+    impl<'disc> Comparable<'disc, Composite> {
+        pub fn new(value: &'disc Composite, ident: &Option<Ident>) -> Self {
+            Self {
+                value,
+                variadic: value.get_variadic_position(),
+                arity: value.len(),
+                ident: ident.clone()
             }
         }
     }
@@ -190,6 +221,7 @@ mod boilerplate {
                 value,
                 variadic: None,
                 arity: value.len(),
+                ident: None,
             }
         }
     }

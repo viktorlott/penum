@@ -28,7 +28,7 @@ pub type PunctuatedParameters = Punctuated<ParameterKind, Token![,]>;
 /// ^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^
 /// <Pattern>           <clause>
 /// ```
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct PenumExpr {
     /// Used for matching against incoming variants
     pub pattern: Vec<PatFrag>,
@@ -46,6 +46,7 @@ pub struct PenumExpr {
 ///  ^^^^^^^    ^^   ^^^^^^   ^^^^^^^^^^^
 ///  <Ident>    <Composite>
 /// ```
+#[derive(Debug)]
 pub struct PatFrag {
     /// An optional identifier that is currently only used to mark
     /// nullary variants.
@@ -63,6 +64,7 @@ pub struct PatFrag {
 /// ^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^   ^^
 /// <Named>               <Unnamed>           <Unit>
 /// ```
+#[derive(Debug)]
 pub enum Composite {
     /// Represents a `struct`-like pattern
     Named {
@@ -91,6 +93,7 @@ pub enum Composite {
 /// Given that the `Regular(Field)` can also either be `named` or
 /// `unnamed`, it's possible to use a `ParameterKind::Regular->Named`
 /// field inside a `GroupKind::Unnamed-Parameters` composite type.
+#[derive(Debug)]
 pub enum ParameterKind {
     /// We use this to represent a `normal` field, that is, a field that
     /// is either `named` or `unnamed`.
