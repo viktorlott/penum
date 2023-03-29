@@ -12,11 +12,14 @@ use crate::{
     utils::UniqueHashId,
 };
 
-use super::{Comparable, PredicateType, PunctuatedParameters, WhereClause, WherePredicate};
+use super::{Comparable, PredicateType, WhereClause, WherePredicate};
 
 mod boilerplate;
 mod parse;
 mod to_tokens;
+
+// TODO: Replace `Punctuated` with custom sequence type
+pub type PunctuatedParameters = Punctuated<ParameterKind, Token![,]>;
 
 /// A Penum expression consists of one or more patterns, and an optional WhereClause.
 ///

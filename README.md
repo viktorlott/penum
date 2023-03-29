@@ -113,6 +113,11 @@ The goal is to be able to call the trait `method` through `Foo`. This
 can be accomplished automatically by marking the trait with a dispatch
 symbol `^`.
 ```rust
+#[penum]
+trait Trait {
+    fn method(&self, text: &str) -> &Option<&str>;
+}
+
 #[penum{ unit | (T) | (_, T) where T: ^Trait }]
 enum Foo {
     V1(Storage), 
@@ -140,9 +145,7 @@ impl Trait for Foo {
 ```rust
     struct Storage;
     struct Something;
-    trait Trait {
-        fn method(&self, text: &str) -> &Option<&str>;
-    }
+
     impl Trait for Storage { ... }
     impl Trait for Something { ... }
 ```

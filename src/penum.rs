@@ -180,6 +180,7 @@ impl Penum<Disassembled> {
                         let bounds = &ty_impl_trait.bounds;
 
                         let mut impl_string = String::new();
+
                         for bound in bounds.iter() {
                             match bound {
                                 syn::TypeParamBound::Trait(trait_bound) => {

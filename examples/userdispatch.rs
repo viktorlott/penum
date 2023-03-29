@@ -61,6 +61,22 @@ enum Foo {
     V3(Ce),
 }
 
+use core::cell::UnsafeCell;
+use std::sync::Once;
+struct Static<T: Default, F = fn() -> T>(UnsafeCell<Option<T>>, F);
+unsafe impl<T: Default> Sync for Static<T> {}
+static RETURN: Static<String> = Static::new();
+impl<T: Default> Static<T> {
+    pub const fn new() -> Self {
+        Self(UnsafeCell::new(None), || T::default())
+    }
+    fn get(&self) -> &'static T {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| unsafe { *self.0.get() = Some(self.1()) });
+        unsafe { (*self.0.get()).as_ref().unwrap_unchecked() }
+    }
+}
+
 fn main() {
     let foo_a = Foo::V1(Al);
     let foo_b = Foo::V2(Be(2));

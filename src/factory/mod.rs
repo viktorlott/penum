@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use std::iter::Zip;
 
-use syn::{punctuated::Iter, punctuated::Punctuated, Field, Fields, Token};
+use syn::{punctuated::Iter, Field, Fields};
 
 mod clause;
 mod pattern;
@@ -10,9 +10,6 @@ mod subject;
 pub use clause::*;
 pub use pattern::*;
 pub use subject::*;
-
-// TODO: Replace `Punctuated` with custom sequence type
-pub type PunctuatedParameters = Punctuated<ParameterKind, Token![,]>;
 
 // ComPairAble would be a stupid name
 pub struct ComparablePair<'disc>(
