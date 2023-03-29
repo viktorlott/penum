@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use proc_macro2::Span;
 
-use syn::parse_quote_spanned;
+use syn::parse_quote;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token;
@@ -17,12 +17,12 @@ use syn::TraitItemMethod;
 
 use quote::ToTokens;
 
+#[derive(Debug)]
 pub struct VariantSignature<'info> {
     enum_ident: &'info Ident,
     variant_ident: &'info Ident,
     caller: Ident,
     params: Composite,
-    span: Span,
 }
 
 /// For each <Dispatchable> -> <{ position, ident, fields }> Used to
@@ -35,12 +35,14 @@ pub enum Position<'a> {
     Key(&'a Ident),
 }
 
+#[derive(Debug)]
 pub enum Param {
     Ident(Ident),
     Placeholder,
     Rest,
 }
 
+#[derive(Debug)]
 pub enum Composite {
     Named(Punctuated<Param, Comma>, token::Brace),
     Unnamed(Punctuated<Param, Comma>, token::Paren),
@@ -60,8 +62,8 @@ impl<'a> Position<'a> {
 
     pub fn get_caller(&self) -> Ident {
         match self {
-            Position::Index(_, field) => parse_quote_spanned! {field.span()=> val },
-            Position::Key(key) => parse_quote_spanned! {key.span()=> #key },
+            Position::Index(_, _) => parse_quote! {val},
+            Position::Key(key) => parse_quote! {#key},
         }
     }
 }
@@ -82,7 +84,6 @@ impl<'info> VariantSignature<'info> {
             variant_ident,
             caller,
             params: fields,
-            span: field.span(),
         }
     }
 
@@ -95,14 +96,14 @@ impl<'info> VariantSignature<'info> {
             variant_ident,
             caller,
             params: fields,
-            span,
+            ..
         } = self;
 
         let (method_ident, sanitized_input) = get_method_parts(method);
 
         (
             method_ident,
-            parse_quote_spanned! {span.span()=> #enum_ident :: #variant_ident #fields => #caller . #method_ident (#sanitized_input)},
+            parse_quote! {#enum_ident :: #variant_ident #fields => #caller . #method_ident (#sanitized_input)},
         )
     }
 }

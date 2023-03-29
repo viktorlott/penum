@@ -10,6 +10,7 @@ description = "Make enum conform to a given pattern"
 license = "MIT OR Apache-2.0"
 keywords = ["enum", "pattern", "shape", "macro", "proc-macro"]
 authors = ["Viktor Lott"]
+readme = "README.md"
 categories = [
     "development-tools::testing",
     "development-tools::procedural-macro-helpers",
@@ -26,3 +27,9 @@ quote = "1.0.23"
 rustfmt = "0.10.0"
 syn = { version = "1.0.109", features = ["full", "visit", "visit-mut", "extra-traits"] }
 trybuild = "1.0.79"
+
+
+[features]
+default = ["dispatch-std"]
+dispatch-custom = []
+dispatch-std = []

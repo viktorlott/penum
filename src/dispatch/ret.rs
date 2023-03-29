@@ -21,26 +21,23 @@ fn static_return<T: ToTokens + Spanned>(ty: &T) -> TokenStream {
                 }
                 fn get(&self) -> &'static T {
                     // SAFETY: Firstly, this static isn't available to
-                    //         the user directly because it's scoped and
-                    //         is only generated through macro expansion
-                    //         at return positions. Secondly, the type
-                    //         we are returning is an immutable static
-                    //         reference which means that it's not
-                    //         possible to mutate it directly, unless
-                    //         the user has an interior mutability type.
-                    //         It's up to the user to make sure that T
-                    //         doesn't contain any unsound datastructure
-                    //         that would break this implementation.
-                    //         Note that T needs to implement Default.
-                    //         Thirdly, this type is meant to return
-                    //         non-const reference types, so to make
-                    //         this work we have to do a lazy
-                    //         initialization, which means that it needs
-                    //         to be thread safe. This is done through a
-                    //         sync primitive that ensures us that it
-                    //         can only be initialized once, and that
-                    //         other threads are blocked from reading it
-                    //         if it's being written to.
+                    // the user directly because it's scoped and is only
+                    // generated through macro expansion at return
+                    // positions. Secondly, the type we are returning is
+                    // an immutable static reference which means that
+                    // it's not possible to mutate it directly, unless
+                    // the user has an interior mutability type. It's up
+                    // to the user to make sure that T doesn't contain
+                    // any unsound datastructure that would break this
+                    // implementation. Note that T needs to implement
+                    // Default. Thirdly, this type is meant to return
+                    // non-const reference types, so to make this work
+                    // we have to do a lazy initialization, which means
+                    // that it needs to be thread safe. This is done
+                    // through a sync primitive that ensures us that it
+                    // can only be initialized once, and that other
+                    // threads are blocked from reading it if it's being
+                    // written to.
                     self.1.call_once(|| unsafe { *self.0.get() = Some(T::default()) });
                     unsafe { (*self.0.get()).as_ref().unwrap_unchecked() }
                 }
@@ -83,7 +80,7 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
 
             // Owned return types without any references:
             //
-            // - Types that can be proven implements Default could be
+            // - Types that are proven to implements Default could be
             //   returned with `Default::default()`
             //
             // - Option<T> could automatically be defaulted to `None`.

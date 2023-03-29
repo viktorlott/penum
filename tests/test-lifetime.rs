@@ -2,18 +2,17 @@
 extern crate penum;
 use penum::penum;
 
-// struct A where for<'a, 'b: 'a> &'b str: AsRef<&'a str>;
-// fn tester<'a, 'b: 'a, T>() where &'a T: AsRef<&'a str> + 'a {}
-
-// fn sdsd() {
-//     tester::<&str>()
+// This should work right?
+// #[penum((T) where T: Copy)]
+// enum Foo<'a, 'b: 'a> {
+//     Bar(&'a i32),
+//     Bar2(&'b i32),
 // }
 
-// #[penum((T) where T: Copy)]
-enum Foo<'a, 'b: 'a> {
-    Bar(&'a i32),
-    Bar2(&'b i32),
-}
+// enum Foo<'a, 'b: 'a> where &'a i32: Copy {
+//     Bar(&'a i32),
+//     Bar2(&'b i32),
+// }
 
 #[penum((T) where T: Copy)]
 enum Foo2<'a, 'b, T> {
