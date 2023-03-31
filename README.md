@@ -51,7 +51,7 @@ This crate is available on [crates.io](https://crates.io/crates/penum)
 and can be used by adding the following to your project's Cargo.toml:
 ```toml
 [dependencies]
-penum = "0.1.19"
+penum = "0.1.20"
 ```
 Or run this command in your cargo project:
 ```sh
@@ -139,22 +139,22 @@ impl Trait for Foo {
 
 ## Examples
 Used penum to force every variant to be a tuple with one field that must
-implement `Copy`.
+implement `Trait`.
 
 ```rust
-#[penum( (T, ..) where T: Copy )]
+#[penum( (T, ..) where T: Trait )]
 enum Guard {
     Bar(String), 
         ^^^^^^
-    // ERROR: `String` doesn't implement `Copy`
+    // ERROR: `String` doesn't implement `Trait`
 
     Bor(Option<String>), 
         ^^^^^^^^^^^^^^
-    // ERROR: `Option<String>` doesn't implement `Copy`
+    // ERROR: `Option<String>` doesn't implement `Trait`
 
     Bur(Vec<String>), 
         ^^^^^^^^^^^
-    // ERROR: `Vec<String>` doesn't implement `Copy`
+    // ERROR: `Vec<String>` doesn't implement `Trait`
 
     Byr(), 
     ^^^^^
@@ -170,6 +170,39 @@ enum Guard {
 
     Bir(i32, String), // Works!
     Beer(i32)         // Works!
+}
+```
+
+If you don't care about the actual pattern matching, then you could use `_` to automatically 
+infer every shape and field. Combine this with concrete dispatch types, and you got yourself a 
+auto dispatcher.
+```rust
+#[penum( _ where Ce: ^Special, Be: ^AsInner<i32> )]
+enum Foo {
+    V1(Al),
+    V2(i32, Be),
+    V3(Ce),
+    V4 { name: String, age: Be },
+}
+
+// Will create these implementations
+impl Special for Foo {
+    fn ret(&self) -> Option<&String> {
+        match self {
+            Foo::V3(val) => val.ret(),
+            _ => None,
+        }
+    }
+}
+
+impl AsInner<i32> for Foo {
+    fn as_inner(&self) -> &i32 {
+        match self {
+            Foo::V2(_, val) => val.as_inner(),
+            Foo::V4 { age, .. } => age.as_inner(),
+            _ => &0,
+        }
+    }
 }
 ```
 

@@ -50,6 +50,8 @@ pub struct Penum<State = Disassembled> {
     _marker: PhantomData<State>,
 }
 
+
+
 impl Penum<Disassembled> {
     pub fn from(expr: PenumExpr, subject: Subject) -> Self {
         Self {
@@ -66,6 +68,7 @@ impl Penum<Disassembled> {
     pub fn assemble(mut self) -> Penum<Assembled> {
         let variants = &self.subject.get_variants();
         let enum_ident = &self.subject.ident;
+        let error = &mut self.error;
 
         if !variants.is_empty() {
             // The point is that as we check for equality, we also do
@@ -84,7 +87,7 @@ impl Penum<Disassembled> {
             // during the dispatch step. Should add
             // `has_dispatchable_member` maybe? let has_clause =
             // self.expr.has_clause(); Turn into iterator instead?
-            let mut maybe_blueprint_map = self.expr.get_blueprints(&mut self.error);
+            let mut maybe_blueprint_map = self.expr.get_blueprints(error);
 
             // Expecting failure like `variant doesn't match shape`,
             // hence pre-calling.
@@ -98,47 +101,50 @@ impl Penum<Disassembled> {
             // 2. Validate each parameter    ...continue... (INNER)
             for (variant_ident, comp_item) in self.subject.get_comparable_fields() {
                 // FIXME: This only affects concrete types.. but
-                //        `.compare(..)` should return a list of matches
-                //        instead of just the first match it finds.
-                //
-                //        # Uni-matcher -> Multi-matcher
-                //        Currently, we can end up returning a pattern that matches in shape, but not
-                //        in structure, even though another pattern could satisfy our variant. In a case
-                //        like the one below, we have a "catch all" variadic.
-                //
-                //        e.g. (i32, ..) | (..) => V1(String, i32), V2(String, String)
-                //                                    ^^^^^^           ^^^^^^
-                //                                    |                |
-                //                                    `Found 'String' but expected 'i32'`
-                //
-                //        Because the first pattern fragment contains a concrete type, it should be possible
-                //        mark the error as temporary and then check for other pattern matches. Note, the first
-                //        error should always be the default one.
-                //
-                //        Given our pattern above, `(..)` should be a fallback pattern.
-                //
-                //        Should we allow concrete types with trait bound at argument position?
-                //        e.g.
-                //          (i32: Trait,  ..) | (..)
-                //          (i32: ^Trait, ..) | (..)
-                //
-                //        For future reference! This should help with dispach inference.
-                //
-                //        # "catch-all" syntax
-                //        Given the example above, if we were to play with it a little, we could end up with
-                //        something like this:
-                //        `(i32, ..) | _` that translate to `(i32, ..) | (..) | {..}`
-                //
-                //        Maybe it's something that would be worth having considering something like this:
-                //        `_ where String: ^AsRef<str>`
+                //  `.compare(..)` should return a list of matches
+                //  instead of just the first match it finds.
+                // 
+                //  # Uni-matcher -> Multi-matcher
+                //  Currently, we can end up returning a pattern that matches in shape, but not
+                //  in structure, even though another pattern could satisfy our variant. In a case
+                //  like the one below, we have a "catch all" variadic.
+                // 
+                //  e.g. (i32, ..) | (..) => V1(String, i32), V2(String, String)
+                //                              ^^^^^^           ^^^^^^
+                //                              |                |
+                //                              `Found 'String' but expected 'i32'`
+                // 
+                //  Because the first pattern fragment contains a concrete type, it should be possible
+                //  mark the error as temporary and then check for other pattern matches. Note, the first
+                //  error should always be the default one.
+                // 
+                //  Given our pattern above, `(..)` should be a fallback pattern.
+                // 
+                //  Should we allow concrete types with trait bound at argument position?
+                //  e.g.
+                //    (i32: Trait,  ..) | (..)
+                //    (i32: ^Trait, ..) | (..)
+                // 
+                //  For future reference! This should help with dispach inference.
+                // 
+                //  # "catch-all" syntax
+                //  Given the example above, if we were to play with it a little, we could end up with
+                //  something like this:
+                //  `(i32, ..) | _` that translate to `(i32, ..) | (..) | {..}`
+                // 
+                //  Maybe it's something that would be worth having considering something like this:
+                //  `_ where String: ^AsRef<str>`
 
                 // 1. Check if we match in `shape`
                 let Some(matched_pair) = comparable_pats.compare(&comp_item) else {
-                    if comp_item.inner.is_empty() {
-                        self.error.extend(variant_ident.span(), no_match_found(variant_ident, &pattern_fmt));
+                    let (span, message) = if comp_item.inner.is_empty() {
+                        (variant_ident.span(), no_match_found(variant_ident, &pattern_fmt))
                     } else {
-                        self.error.extend(comp_item.inner.span(), no_match_found(comp_item.inner, &pattern_fmt));
+                        (comp_item.inner.span(), no_match_found(comp_item.inner, &pattern_fmt))
                     };
+
+                    self.error.extend(span, message);
+
                     continue
                 };
 
@@ -237,7 +243,6 @@ impl Penum<Disassembled> {
                     // NOTE: This string only contains the Ident, so any
                     // generic parameters will be discarded
                     let pat_ty_string = pat_field.ty.get_string();
-
                     let pat_ty_unique = UniqueHashId(pat_field.ty.clone());
 
                     // Check if it's a generic or concrete type
@@ -248,8 +253,9 @@ impl Penum<Disassembled> {
                     if is_generic {
                         // 3. Dispachable list
                         if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                            blueprints.find_and_attach(&pat_ty_unique, &variant_sig);
-                            blueprints.find_and_attach(&item_ty_unique, &variant_sig);
+                            for ty_unique in [&pat_ty_unique, &item_ty_unique] {
+                                blueprints.find_and_attach(ty_unique, &variant_sig);
+                            }
                         };
 
                         // First we check if pty (T) exists in

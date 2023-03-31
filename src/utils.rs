@@ -62,17 +62,15 @@ impl<T: Hash> UniqueHashId<T> {
     {
         let mut hasher = DefaultHasher::default();
         self.hash(&mut hasher);
-        format_ident!("__Unique_Id_{}", hasher.finish(), span = self.0.span())
+        format_ident!("_{}", hasher.finish(), span = self.0.span())
     }
 
     pub fn get_unique_string(&self) -> String {
         let mut hasher = DefaultHasher::default();
         self.hash(&mut hasher);
-        format!("__Unique_Id_{}", hasher.finish())
+        format!("_{}", hasher.finish())
     }
 }
-
-unsafe impl<T> Sync for Static<T> {}
 
 impl<T> Static<T> {
     pub const fn new(func: fn() -> T) -> Self {
@@ -84,6 +82,8 @@ impl<T> Static<T> {
         unsafe { (*self.0.get()).as_ref().unwrap_unchecked() }
     }
 }
+
+unsafe impl<T> Sync for Static<T> {}
 
 impl From<Ident> for UniqueHashId<Type> {
     fn from(value: Ident) -> Self {
@@ -152,7 +152,7 @@ pub fn lifetime_not_permitted() -> &'static str {
 }
 
 pub fn into_unique_ident(value: &str, tag: &Ident, span: Span) -> Ident {
-    format_ident!("__IMPL_{}_{}_", tag, value, span = span)
+    format_ident!("_{}_{}", tag, value, span = span)
 }
 
 #[cfg(test)]
