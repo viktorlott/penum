@@ -4,43 +4,43 @@ use syn::{
     Fields, FieldsNamed, FieldsUnnamed,
 };
 
-use crate::factory::{Composite, ParameterKind};
+use crate::factory::{PatComposite, PatFieldKind};
 
-impl From<&Fields> for Composite {
+impl From<&Fields> for PatComposite {
     fn from(value: &Fields) -> Self {
         match value {
-            Fields::Named(FieldsNamed { named, brace_token }) => Composite::Named {
+            Fields::Named(FieldsNamed { named, brace_token }) => PatComposite::Named {
                 parameters: parse_quote!(#named),
                 delimiter: *brace_token,
             },
             Fields::Unnamed(FieldsUnnamed {
                 unnamed,
                 paren_token,
-            }) => Composite::Unnamed {
+            }) => PatComposite::Unnamed {
                 parameters: parse_quote!(#unnamed),
                 delimiter: *paren_token,
             },
-            Fields::Unit => Composite::Unit,
+            Fields::Unit => PatComposite::Unit,
         }
     }
 }
 
-impl IntoIterator for Composite {
-    type Item = ParameterKind;
-    type IntoIter = IntoIter<ParameterKind>;
+impl IntoIterator for PatComposite {
+    type Item = PatFieldKind;
+    type IntoIter = IntoIter<PatFieldKind>;
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            Composite::Named { parameters, .. } => parameters.into_iter(),
-            Composite::Unnamed { parameters, .. } => parameters.into_iter(),
-            _ => Punctuated::<ParameterKind, ()>::new().into_iter(),
+            PatComposite::Named { parameters, .. } => parameters.into_iter(),
+            PatComposite::Unnamed { parameters, .. } => parameters.into_iter(),
+            _ => Punctuated::<PatFieldKind, ()>::new().into_iter(),
         }
     }
 }
 
-impl<'a> IntoIterator for &'a Composite {
-    type Item = &'a ParameterKind;
-    type IntoIter = Iter<'a, ParameterKind>;
+impl<'a> IntoIterator for &'a PatComposite {
+    type Item = &'a PatFieldKind;
+    type IntoIter = Iter<'a, PatFieldKind>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()

@@ -20,7 +20,7 @@ use syn::{
 };
 
 use crate::{
-    factory::{Composite, PatFrag},
+    factory::{PatComposite, PatFrag},
     penum::Stringify,
 };
 

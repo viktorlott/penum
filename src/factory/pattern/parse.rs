@@ -4,7 +4,7 @@ use syn::{
     token, Field, Ident, LitInt, LitStr, Token,
 };
 
-use super::{Composite, ParameterKind, PatFrag, PenumExpr};
+use super::{PatComposite, PatFieldKind, PatFrag, PenumExpr};
 
 impl Parse for PenumExpr {
     fn parse(input: ParseStream) -> syn::Result<Self> {
@@ -36,37 +36,37 @@ impl Parse for PenumExpr {
     }
 }
 
-impl Parse for Composite {
+impl Parse for PatComposite {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let content;
         Ok(if input.peek(token::Brace) {
             let token = braced!(content in input);
-            Composite::Named {
-                parameters: content.parse_terminated(ParameterKind::parse)?,
+            PatComposite::Named {
+                parameters: content.parse_terminated(PatFieldKind::parse)?,
                 delimiter: token,
             }
         } else if input.peek(token::Paren) {
             let token = parenthesized!(content in input);
-            Composite::Unnamed {
-                parameters: content.parse_terminated(ParameterKind::parse)?,
+            PatComposite::Unnamed {
+                parameters: content.parse_terminated(PatFieldKind::parse)?,
                 delimiter: token,
             }
         } else {
-            Composite::Unit
+            PatComposite::Unit
         })
     }
 }
 
-impl Parse for ParameterKind {
+impl Parse for PatFieldKind {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(if input.peek(Token![..]) && input.peek2(LitInt) {
-            ParameterKind::Range(input.parse()?)
+            PatFieldKind::Range(input.parse()?)
         } else if input.peek(Token![..]) {
-            ParameterKind::Variadic(input.parse()?)
+            PatFieldKind::Variadic(input.parse()?)
         } else if input.peek(Ident) && input.peek2(Token![:]) {
-            ParameterKind::Regular(input.call(Field::parse_named)?)
+            PatFieldKind::Field(input.call(Field::parse_named)?)
         } else {
-            ParameterKind::Regular(input.call(Field::parse_unnamed)?)
+            PatFieldKind::Field(input.call(Field::parse_unnamed)?)
         })
     }
 }
@@ -91,7 +91,7 @@ pub fn parse_pattern_fragment(input: ParseStream) -> syn::Result<PatFrag> {
         let _: Token![_] = input.parse()?;
         Ok(PatFrag {
             ident: None,
-            group: Composite::Inferred,
+            group: PatComposite::Inferred,
         })
     } else {
         Ok(PatFrag {

@@ -19,7 +19,7 @@ use syn::Error;
 use syn::Type;
 
 use crate::factory::ComparablePats;
-use crate::factory::ParameterKind;
+use crate::factory::PatFieldKind;
 use crate::factory::PenumExpr;
 use crate::factory::Subject;
 use crate::factory::WherePredicate;
@@ -169,12 +169,14 @@ impl Penum<Disassembled> {
                         max_fields_len,
                     );
 
-                    if let ParameterKind::Inferred = pat_parameter {
+
+                    if let PatFieldKind::Infer = pat_parameter {
                         if let Some(blueprints) = maybe_blueprint_map.as_mut() {
                             blueprints.find_and_attach(&item_ty_unique, &variant_sig);
                         }
                         self.types
                             .polymap_insert(item_ty_unique.clone(), item_ty_unique);
+
                         continue;
                     }
 

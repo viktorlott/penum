@@ -19,7 +19,7 @@ mod parse;
 mod to_tokens;
 
 // TODO: Replace `Punctuated` with custom sequence type
-pub type PunctuatedParameters = Punctuated<ParameterKind, Token![,]>;
+pub type PunctuatedParameters = Punctuated<PatFieldKind, Token![,]>;
 
 /// A Penum expression consists of one or more patterns, and an optional WhereClause.
 ///
@@ -52,20 +52,20 @@ pub struct PatFrag {
     /// nullary variants.
     pub ident: Option<Ident>,
 
-    /// A group is a composite of zero or more ParameterKinds surrounded
+    /// A group is a composite of zero or more PatComposite surrounded
     /// by a delimiter
-    pub group: Composite,
+    pub group: PatComposite,
 }
 
 /// A composite can come in 3 flavors:
 ///
 /// ```text
-/// { ParameterKind,* } | (ParameterKind,*) | ()
-/// ^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^   ^^
+/// { PatComposite,* } | (PatComposite,*) | ()
+/// ^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^   ^^
 /// <Named>               <Unnamed>           <Unit>
 /// ```
 #[derive(Debug)]
-pub enum Composite {
+pub enum PatComposite {
     /// Represents a `struct`-like pattern
     Named {
         parameters: PunctuatedParameters,
@@ -94,16 +94,19 @@ pub enum Composite {
 /// ```
 ///
 /// Given that the `Regular(Field)` can also either be `named` or
-/// `unnamed`, it's possible to use a `ParameterKind::Regular->Named`
+/// `unnamed`, it's possible to use a `PatParamKind::Regular->Named`
 /// field inside a `GroupKind::Unnamed-Parameters` composite type.
 #[derive(Debug)]
-pub enum ParameterKind {
+pub enum PatFieldKind {
+    /// Used to indicate that this field will be inferred
+    Infer,
+
     /// We use this to represent a `normal` field, that is, a field that
     /// is either `named` or `unnamed`.
     ///
     /// This is done by having the `ident` and `colon_token` fields be
     /// optional.
-    Regular(Field),
+    Field(Field),
 
     /// We use this to represent that we don't care amount the left over
     /// arguments.
@@ -123,9 +126,6 @@ pub enum ParameterKind {
     /// ```
     Range(ExprRange),
 
-    /// Used to indicate that all parameter types should be inferred
-    Inferred,
-
     /// Suppose to be used for derived Default
     Nothing,
 }
@@ -143,7 +143,7 @@ impl PenumExpr {
             .unwrap()
     }
 
-    pub fn get_comparable_patterns(&self) -> Vec<Comparable<Composite>> {
+    pub fn get_comparable_patterns(&self) -> Vec<Comparable<PatComposite>> {
         self.pattern
             .iter()
             .map(|pattern| Comparable::from(&pattern.group))
@@ -213,22 +213,22 @@ impl PenumExpr {
     }
 }
 
-impl ParameterKind {
+impl PatFieldKind {
     /// This is useful when we just want to check if we should care
-    /// about checking the inner structure of ParameterKind.
+    /// about checking the inner structure of PatParamKind.
     pub fn is_field(&self) -> bool {
-        matches!(self, ParameterKind::Regular(_))
+        matches!(self, PatFieldKind::Field(_))
     }
 
     /// Used in ComparablePair method calls to check if a parameter is
     /// variadic
     pub fn is_variadic(&self) -> bool {
-        matches!(self, ParameterKind::Variadic(_))
+        matches!(self, PatFieldKind::Variadic(_))
     }
 
     /// We currently don't use this one
     pub fn is_range(&self) -> bool {
-        matches!(self, ParameterKind::Range(_))
+        matches!(self, PatFieldKind::Range(_))
     }
 
     /// This is basically the same as `is_field` but instead of
@@ -236,27 +236,27 @@ impl ParameterKind {
     /// field.
     pub fn get_field(&self) -> Option<&Field> {
         match self {
-            ParameterKind::Regular(field) => Some(field),
+            PatFieldKind::Field(field) => Some(field),
             _ => None,
         }
     }
 }
 
-impl Composite {
+impl PatComposite {
     pub fn len(&self) -> usize {
         match self {
-            Composite::Named { parameters, .. } => parameters.len(),
-            Composite::Unnamed { parameters, .. } => parameters.len(),
+            PatComposite::Named { parameters, .. } => parameters.len(),
+            PatComposite::Unnamed { parameters, .. } => parameters.len(),
             _ => 0,
         }
     }
 
-    pub fn iter(&self) -> Iter<'_, ParameterKind> {
-        thread_local! {static EMPTY_SLICE_ITER: Punctuated<ParameterKind, ()> = Punctuated::new();}
+    pub fn iter(&self) -> Iter<'_, PatFieldKind> {
+        thread_local! {static EMPTY_SLICE_ITER: Punctuated<PatFieldKind, ()> = Punctuated::new();}
 
         match self {
-            Composite::Named { parameters, .. } => parameters.iter(),
-            Composite::Unnamed { parameters, .. } => parameters.iter(),
+            PatComposite::Named { parameters, .. } => parameters.iter(),
+            PatComposite::Unnamed { parameters, .. } => parameters.iter(),
             // "SAFETY": This is not recommended. The thing is that we
             //           are transmuting an empty iter that is created
             //           from a static Punctuated struct. The lifetime
@@ -274,24 +274,24 @@ impl Composite {
     }
 
     pub fn is_unit(&self) -> bool {
-        matches!(self, Composite::Unit)
+        matches!(self, PatComposite::Unit)
     }
 
     pub fn has_variadic(&self) -> bool {
         match self {
-            Composite::Named { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
-            Composite::Unnamed { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
+            PatComposite::Named { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
+            PatComposite::Unnamed { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
             _ => false,
         }
     }
 
     pub fn get_variadic_position(&self) -> Option<usize> {
         match self {
-            Composite::Named { parameters, .. } => parameters
+            PatComposite::Named { parameters, .. } => parameters
                 .iter()
                 .enumerate()
                 .find_map(|(pos, fk)| fk.is_variadic().then_some(pos)),
-            Composite::Unnamed { parameters, .. } => parameters
+            PatComposite::Unnamed { parameters, .. } => parameters
                 .iter()
                 .enumerate()
                 .find_map(|(pos, fk)| fk.is_variadic().then_some(pos)),
@@ -301,24 +301,24 @@ impl Composite {
 
     pub fn has_last_variadic(&self) -> bool {
         match self {
-            Composite::Named { parameters, .. } => {
+            PatComposite::Named { parameters, .. } => {
                 matches!(parameters.iter().last().take(), Some(val) if val.is_variadic())
             }
-            Composite::Unnamed { parameters, .. } => {
+            PatComposite::Unnamed { parameters, .. } => {
                 matches!(parameters.iter().last().take(), Some(val) if val.is_variadic())
             }
             _ => false,
         }
     }
 
-    pub fn count_with(&self, mut f: impl FnMut(&ParameterKind) -> bool) -> usize {
+    pub fn count_with(&self, mut f: impl FnMut(&PatFieldKind) -> bool) -> usize {
         match self {
-            Composite::Named { parameters, .. } => {
+            PatComposite::Named { parameters, .. } => {
                 parameters
                     .iter()
                     .fold(0, |acc, fk| if f(fk) { acc + 1 } else { acc })
             }
-            Composite::Unnamed { parameters, .. } => {
+            PatComposite::Unnamed { parameters, .. } => {
                 parameters
                     .iter()
                     .fold(0, |acc, fk| if f(fk) { acc + 1 } else { acc })
