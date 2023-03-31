@@ -198,7 +198,9 @@ mod boilerplate {
         }
     }
 
-    impl<'a> From<(&'a Comparable<'a, PatComposite>, &'a Comparable<'a, Fields>)> for ComparablePair<'a> {
+    impl<'a> From<(&'a Comparable<'a, PatComposite>, &'a Comparable<'a, Fields>)>
+        for ComparablePair<'a>
+    {
         fn from(value: (&'a Comparable<PatComposite>, &'a Comparable<Fields>)) -> Self {
             Self(value.0, value.1)
         }

@@ -169,7 +169,6 @@ impl Penum<Disassembled> {
                         max_fields_len,
                     );
 
-
                     if let PatFieldKind::Infer = pat_parameter {
                         if let Some(blueprints) = maybe_blueprint_map.as_mut() {
                             blueprints.find_and_attach(&item_ty_unique, &variant_sig);

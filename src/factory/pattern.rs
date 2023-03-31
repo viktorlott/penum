@@ -280,7 +280,9 @@ impl PatComposite {
     pub fn has_variadic(&self) -> bool {
         match self {
             PatComposite::Named { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
-            PatComposite::Unnamed { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
+            PatComposite::Unnamed { parameters, .. } => {
+                parameters.iter().any(|fk| fk.is_variadic())
+            }
             _ => false,
         }
     }
