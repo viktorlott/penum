@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 
@@ -16,6 +18,7 @@ impl ToTokens for ParameterKind {
             ParameterKind::Regular(f) => f.to_tokens(tokens),
             ParameterKind::Variadic(v) => v.to_tokens(tokens),
             ParameterKind::Range(r) => r.to_tokens(tokens),
+            ParameterKind::Inferred => tokens.extend(TokenStream::from_str("_")),
             ParameterKind::Nothing => (),
         }
     }
@@ -32,7 +35,7 @@ impl ToTokens for Composite {
                 parameters,
                 delimiter,
             } => delimiter.surround(tokens, |tokens| parameters.to_tokens(tokens)),
-            Composite::Unit => (),
+            _ => (),
         }
     }
 }

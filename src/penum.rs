@@ -19,6 +19,7 @@ use syn::Error;
 use syn::Type;
 
 use crate::factory::ComparablePats;
+use crate::factory::ParameterKind;
 use crate::factory::PenumExpr;
 use crate::factory::Subject;
 use crate::factory::WherePredicate;
@@ -133,10 +134,10 @@ impl Penum<Disassembled> {
 
                 // 1. Check if we match in `shape`
                 let Some(matched_pair) = comparable_pats.compare(&comp_item) else {
-                    if comp_item.value.is_empty() {
+                    if comp_item.inner.is_empty() {
                         self.error.extend(variant_ident.span(), no_match_found(variant_ident, &pattern_fmt));
                     } else {
-                        self.error.extend(comp_item.value.span(), no_match_found(comp_item.value, &pattern_fmt));
+                        self.error.extend(comp_item.inner.span(), no_match_found(comp_item.inner, &pattern_fmt));
                     };
                     continue
                 };
@@ -148,19 +149,11 @@ impl Penum<Disassembled> {
                     continue;
                 }
 
-                let max_fields_len = comp_item.value.len();
+                let max_fields_len = comp_item.inner.len();
 
                 // 2. Check if we match in `structure`. (We are naively
                 // always expecting to never have infixed variadics)
                 for (_index_param, (pat_parameter, item_field)) in matched_pair.zip().enumerate() {
-                    // If we cannot desctructure a pattern field, then
-                    // it must be variadic. This might change later
-                    let Some(pat_field) = pat_parameter.get_field() else {
-                        break;
-                    };
-
-                    // TODO: Refactor into TypeId instead.
-                    let item_ty_string = item_field.ty.get_string();
                     let item_ty_unique = UniqueHashId(item_field.ty.clone());
 
                     // FIXME: We are only expecting one dispatch per
@@ -175,6 +168,24 @@ impl Penum<Disassembled> {
                         item_field,
                         max_fields_len,
                     );
+
+                    if let ParameterKind::Inferred = pat_parameter {
+                        if let Some(blueprints) = maybe_blueprint_map.as_mut() {
+                            blueprints.find_and_attach(&item_ty_unique, &variant_sig);
+                        }
+                        self.types
+                            .polymap_insert(item_ty_unique.clone(), item_ty_unique);
+                        continue;
+                    }
+
+                    // If we cannot desctructure a pattern field, then
+                    // it must be variadic. This might change later
+                    let Some(pat_field) = pat_parameter.get_field() else {
+                        break;
+                    };
+
+                    // TODO: Refactor into TypeId instead.
+                    let item_ty_string = item_field.ty.get_string();
 
                     if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
                         let bounds = &ty_impl_trait.bounds;

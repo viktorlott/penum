@@ -4,8 +4,6 @@ use syn::{
     token, Field, Ident, LitInt, LitStr, Token,
 };
 
-use crate::utils::parse_pattern;
-
 use super::{Composite, ParameterKind, PatFrag, PenumExpr};
 
 impl Parse for PenumExpr {
@@ -34,19 +32,6 @@ impl Parse for PenumExpr {
                     None
                 }
             },
-        })
-    }
-}
-
-impl Parse for PatFrag {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.peek(Token![$]) {
-            input.parse::<Token![$]>()?;
-        }
-
-        Ok(PatFrag {
-            ident: input.parse()?,
-            group: input.parse()?,
         })
     }
 }
@@ -82,6 +67,36 @@ impl Parse for ParameterKind {
             ParameterKind::Regular(input.call(Field::parse_named)?)
         } else {
             ParameterKind::Regular(input.call(Field::parse_unnamed)?)
+        })
+    }
+}
+
+pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatFrag>> {
+    let mut shape = vec![input.call(parse_pattern_fragment)?];
+
+    while input.peek(token::Or) {
+        let _: token::Or = input.parse()?;
+        shape.push(input.call(parse_pattern_fragment)?);
+    }
+
+    Ok(shape)
+}
+
+pub fn parse_pattern_fragment(input: ParseStream) -> syn::Result<PatFrag> {
+    if input.peek(Token![$]) {
+        let _: Token![$] = input.parse()?;
+    }
+
+    if input.peek(Token![_]) {
+        let _: Token![_] = input.parse()?;
+        Ok(PatFrag {
+            ident: None,
+            group: Composite::Inferred,
+        })
+    } else {
+        Ok(PatFrag {
+            ident: input.parse()?,
+            group: input.parse()?,
         })
     }
 }

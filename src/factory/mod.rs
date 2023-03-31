@@ -1,8 +1,9 @@
 #![allow(dead_code)]
-use std::iter::Zip;
+use std::iter::repeat;
+use std::iter::zip;
 
-use proc_macro2::Ident;
-use syn::{punctuated::Iter, Field, Fields};
+use syn::Field;
+use syn::Fields;
 
 mod clause;
 mod pattern;
@@ -11,8 +12,6 @@ mod subject;
 pub use clause::*;
 pub use pattern::*;
 pub use subject::*;
-
-use crate::penum::Stringify;
 
 // ComPairAble would be a stupid name
 pub struct ComparablePair<'disc>(
@@ -29,16 +28,13 @@ pub struct ComparablePair<'disc>(
 #[non_exhaustive]
 pub struct Comparable<'disc, T> {
     /// To identify the discriminant of the composite type
-    pub value: &'disc T,
+    pub inner: &'disc T,
 
     /// Some(usize) implies it has variadic at position `usize`.
     variadic: Option<usize>,
 
     /// The number of arguments in the group.
     arity: usize,
-
-    /// If patfrag has an ident
-    ident: Option<Ident>
 }
 
 /// This is just an intermediate struct to hide some logic behind.
@@ -48,6 +44,11 @@ pub struct ComparablePats<'disc>(Vec<Comparable<'disc, Composite>>);
 ///
 /// NOTE: Could probably have used discriminants instead..
 enum MatchKind {
+    /// Infer Compound and fields
+    ///
+    /// This is used when we want to register all fields in a group.
+    Inferred,
+
     /// Mathed either a `Named` or an `Unnamed` pair.
     ///
     /// Compound matches implies that we have inner structure to continue comparing
@@ -55,12 +56,9 @@ enum MatchKind {
 
     /// Matched a unit pair
     ///
-    /// Nullary matches implies that we satisfy the pattern shape,
+    /// Empty matches implies that we satisfy the pattern shape,
     /// and that we don't need to compare inner structure
-    Nullary,
-
-    /// Inferred _
-    Inferred,
+    Empty,
 
     /// Nothing match
     None,
@@ -71,18 +69,27 @@ impl<'disc> ComparablePair<'disc> {
     ///
     /// e.g. `is_unit()`
     pub fn as_composite(&self) -> &Composite {
-        self.0.value
+        self.0.inner
     }
 
     /// Given that we only allow variadic at the end lets us always be able to zip these together.
     ///
-    pub fn zip(&self) -> Zip<Iter<ParameterKind>, Iter<Field>> {
+    pub fn zip(&self) -> impl Iterator<Item = (&ParameterKind, &Field)> {
         if self.contains_residual() {
             // Might be better to emit this as a compile error instead.
             debug_assert!(self.has_variadic_last());
         }
 
-        self.0.value.into_iter().zip(self.1.value.into_iter())
+        // FIXME: We could probably use a different strategy than this one.
+        if let Composite::Inferred = self.0.inner {
+            zip(repeat(&ParameterKind::Inferred), self.1.inner)
+                .collect::<Vec<(&ParameterKind, &Field)>>()
+                .into_iter()
+        } else {
+            zip(self.0.inner, self.1.inner)
+                .collect::<Vec<(&ParameterKind, &Field)>>()
+                .into_iter()
+        }
     }
 
     /// Used to ensure that a matched pair have the same arity.
@@ -117,17 +124,13 @@ impl<'disc> ComparablePair<'disc> {
     }
 
     fn match_kind(&self) -> MatchKind {
-        match (self.0.value, self.1.value, self.0.ident.as_ref()) {
-            (&Composite::Named { .. }, &Fields::Named(..), _)
-            | (&Composite::Unnamed { .. }, &Fields::Unnamed(..), _) => MatchKind::Compound,
-            (Composite::Unit, Fields::Unit, _) => MatchKind::Nullary,
-            (Composite::Unit, _, Some(ident)) => {
-                if ident.get_string() == "_" {
-                    MatchKind::Inferred
-                } else {
-                    MatchKind::None
-                }
-            },
+        match (self.0.inner, self.1.inner) {
+            (&Composite::Named { .. }, &Fields::Named(..)) => MatchKind::Compound,
+            (&Composite::Unnamed { .. }, &Fields::Unnamed(..)) => MatchKind::Compound,
+
+            (Composite::Unit, Fields::Unit) => MatchKind::Empty,
+
+            (Composite::Inferred, _) => MatchKind::Inferred,
             _ => MatchKind::None,
         }
     }
@@ -136,18 +139,19 @@ impl<'disc> ComparablePair<'disc> {
 impl<'disc> ComparablePats<'disc> {
     /// Each compare creates a new Iter where we then compare incoming field with each pattern
     pub fn compare(&'disc self, comp_item: &'disc Comparable<Fields>) -> Option<ComparablePair> {
-        self.0.iter().find_map(pattern_match(comp_item))
+        self.iter().find_map(into_comparable_pair(comp_item))
     }
 }
 
 /// This is a very expensive way of finding a match. We should convert both into ComparableItems before looping over them.
-pub fn pattern_match<'a>(
+pub fn into_comparable_pair<'a>(
     fields: &'a Comparable<Fields>,
 ) -> impl FnMut(&'a Comparable<Composite>) -> Option<ComparablePair<'a>> {
     move |shape: &Comparable<Composite>| {
         let cmp_pair = ComparablePair::from((shape, fields));
 
         match cmp_pair.match_kind() {
+            MatchKind::Inferred => Some(cmp_pair),
             MatchKind::Compound => {
                 if cmp_pair.has_variadic_last() {
                     cmp_pair
@@ -157,26 +161,33 @@ pub fn pattern_match<'a>(
                     cmp_pair.check_arity_equality().then_some(cmp_pair)
                 }
             }
-            MatchKind::Nullary => Some(cmp_pair),
-            MatchKind::Inferred => Some(cmp_pair),
+            MatchKind::Empty => Some(cmp_pair),
             _ => None,
         }
     }
 }
 
 mod boilerplate {
+    use std::ops::Deref;
+
     use super::*;
+
+    impl<'disc> Deref for ComparablePats<'disc> {
+        type Target = Vec<Comparable<'disc, Composite>>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
 
     impl<'disc> From<ComparablePair<'disc>> for (&'disc Composite, &'disc Fields) {
         fn from(val: ComparablePair<'disc>) -> Self {
-            (val.0.value, val.1.value)
+            (val.0.inner, val.1.inner)
         }
     }
 
     impl<'disc> From<&'disc PenumExpr> for ComparablePats<'disc> {
         fn from(value: &'disc PenumExpr) -> Self {
-
-            println!("{:#?}", value.pattern);
             Self(
                 value
                     .pattern
@@ -196,21 +207,19 @@ mod boilerplate {
     impl<'disc> From<&'disc Composite> for Comparable<'disc, Composite> {
         fn from(value: &'disc Composite) -> Self {
             Self {
-                value,
+                inner: value,
                 variadic: value.get_variadic_position(),
                 arity: value.len(),
-                ident: None,
             }
         }
     }
 
     impl<'disc> Comparable<'disc, Composite> {
-        pub fn new(value: &'disc Composite, ident: &Option<Ident>) -> Self {
+        pub fn new(value: &'disc Composite) -> Self {
             Self {
-                value,
+                inner: value,
                 variadic: value.get_variadic_position(),
                 arity: value.len(),
-                ident: ident.clone()
             }
         }
     }
@@ -218,10 +227,9 @@ mod boilerplate {
     impl<'disc> From<&'disc Fields> for Comparable<'disc, Fields> {
         fn from(value: &'disc Fields) -> Self {
             Self {
-                value,
+                inner: value,
                 variadic: None,
                 arity: value.len(),
-                ident: None,
             }
         }
     }

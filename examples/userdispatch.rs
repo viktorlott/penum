@@ -26,6 +26,12 @@ impl Special for Ce {
     }
 }
 
+impl AsInner<i32> for Be {
+    fn as_inner(&self) -> &i32 {
+        &self.0
+    }
+}
+
 impl Echo for Al {
     fn echo(&self) -> String {
         "A".to_string()
@@ -42,23 +48,13 @@ impl Echo for Ce {
     }
 }
 
-impl AsInner<i32> for Be {
-    fn as_inner(&self) -> &i32 {
-        &self.0
-    }
-}
-
 #[
-penum(
-    (T) where
-        Ce: ^Special,
-        T: ^Echo,
-        Be: ^AsInner<i32>,
-)]
+penum(_ where Ce: ^Special, Be: ^AsInner<i32>)]
 enum Foo {
     V1(Al),
-    V2(Be),
+    V2(i32, Be),
     V3(Ce),
+    V4 { name: String, age: Be },
 }
 
 use core::cell::UnsafeCell;
@@ -78,19 +74,19 @@ impl<T: Default> Static<T> {
 }
 
 fn main() {
-    let foo_a = Foo::V1(Al);
-    let foo_b = Foo::V2(Be(2));
-    let foo_c = Foo::V3(Ce("hello".to_string()));
+    // let foo_a = Foo::V1(Al);
+    // let foo_b = Foo::V2(Be(2));
+    // let foo_c = Foo::V3(Ce("hello".to_string()));
 
-    println!("{}", foo_a.echo());
-    println!("{}", foo_b.echo());
-    println!("{}", foo_c.echo());
+    // println!("{}", foo_a.echo());
+    // println!("{}", foo_b.echo());
+    // println!("{}", foo_c.echo());
 
-    println!("{}", foo_a.as_inner());
-    println!("{}", foo_b.as_inner());
-    println!("{}", foo_c.as_inner());
+    // println!("{}", foo_a.as_inner());
+    // println!("{}", foo_b.as_inner());
+    // println!("{}", foo_c.as_inner());
 
-    println!("{:?}", foo_a.ret());
-    println!("{:?}", foo_b.ret());
-    println!("{:?}", foo_c.ret());
+    // println!("{:?}", foo_a.ret());
+    // println!("{:?}", foo_b.ret());
+    // println!("{:?}", foo_c.ret());
 }

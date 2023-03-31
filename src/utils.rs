@@ -1,8 +1,10 @@
-// #![allow(unused)]
+#![allow(unused)]
 use std::{
+    cell::UnsafeCell,
     collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet},
     hash::{Hash, Hasher},
     ops::Deref,
+    sync::Once,
 };
 
 use proc_macro2::{Ident, Span};
@@ -17,10 +19,18 @@ use syn::{
     Token, TraitBound, Type, Variant, WhereClause,
 };
 
-use crate::{factory::PatFrag, penum::Stringify};
+use crate::{
+    factory::{Composite, PatFrag},
+    penum::Stringify,
+};
+
+pub struct Static<T, F = fn() -> T>(UnsafeCell<Option<T>>, Once, F);
 
 #[derive(Default, Debug)]
 pub struct PolymorphicMap<K: Hash, V: Hash>(BTreeMap<K, BTreeSet<V>>);
+
+#[derive(Hash, Debug, Clone, Copy)]
+pub struct UniqueHashId<T: Hash>(pub T);
 
 /// Fix these later
 impl<K: Hash + Clone, V: Hash + Clone> PolymorphicMap<UniqueHashId<K>, UniqueHashId<V>>
@@ -45,9 +55,6 @@ impl<K: Hash, V: Hash> Deref for PolymorphicMap<UniqueHashId<K>, UniqueHashId<V>
     }
 }
 
-#[derive(Hash, Debug, Clone, Copy)]
-pub struct UniqueHashId<T: Hash>(pub T);
-
 impl<T: Hash> UniqueHashId<T> {
     pub fn get_unique_ident(&self) -> Ident
     where
@@ -62,6 +69,19 @@ impl<T: Hash> UniqueHashId<T> {
         let mut hasher = DefaultHasher::default();
         self.hash(&mut hasher);
         format!("__Unique_Id_{}", hasher.finish())
+    }
+}
+
+unsafe impl<T> Sync for Static<T> {}
+
+impl<T> Static<T> {
+    pub const fn new(func: fn() -> T) -> Self {
+        Self(UnsafeCell::new(None), Once::new(), func)
+    }
+    pub fn get(&self) -> &'static T {
+        self.1
+            .call_once(|| unsafe { *self.0.get() = Some(self.2()) });
+        unsafe { (*self.0.get()).as_ref().unwrap_unchecked() }
     }
 }
 
@@ -111,43 +131,6 @@ impl Ord for UniqueHashId<Type> {
 }
 
 impl Eq for UniqueHashId<Type> {}
-
-pub fn parse_pattern(input: ParseStream) -> syn::Result<Vec<PatFrag>> {
-    let mut shape = vec![input.call(parse_pattern_fragment)?];
-
-    while input.peek(token::Or) {
-        let _: token::Or = input.parse()?;
-        shape.push(input.call(parse_pattern_fragment)?);
-    }
-
-    Ok(shape)
-}
-
-pub fn parse_pattern_fragment(input: ParseStream) -> syn::Result<PatFrag> {
-    if input.peek(Token![$]) {
-        let _: Token![$] = input.parse()?;
-    }
-    Ok(PatFrag {
-        ident: input.parse()?,
-        group: input.parse()?,
-    })
-}
-
-pub fn parse_enum(
-    input: ParseStream,
-) -> syn::Result<(
-    Option<WhereClause>,
-    token::Brace,
-    Punctuated<Variant, Token![,]>,
-)> {
-    let where_clause = input.parse()?;
-
-    let content;
-    let brace = braced!(content in input);
-    let variants = content.parse_terminated(Variant::parse)?;
-
-    Ok((where_clause, brace, variants))
-}
 
 pub fn no_match_found(item: &impl ToTokens, pat: &str) -> String {
     format!(

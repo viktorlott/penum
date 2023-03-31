@@ -1,10 +1,10 @@
 use proc_macro2::Ident;
 use syn::{
+    braced,
     parse::{Parse, ParseStream},
-    Attribute, DataEnum, Generics, Token, Visibility,
+    punctuated::Punctuated,
+    token, Attribute, DataEnum, Generics, Token, Variant, Visibility, WhereClause,
 };
-
-use crate::utils::parse_enum;
 
 use super::Subject;
 
@@ -42,4 +42,20 @@ impl Parse for Subject {
             Err(lookahead.error())
         }
     }
+}
+
+pub fn parse_enum(
+    input: ParseStream,
+) -> syn::Result<(
+    Option<WhereClause>,
+    token::Brace,
+    Punctuated<Variant, Token![,]>,
+)> {
+    let where_clause = input.parse()?;
+
+    let content;
+    let brace = braced!(content in input);
+    let variants = content.parse_terminated(Variant::parse)?;
+
+    Ok((where_clause, brace, variants))
 }

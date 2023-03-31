@@ -31,9 +31,9 @@ impl IntoIterator for Composite {
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            Composite::Unit => Punctuated::<ParameterKind, ()>::new().into_iter(),
             Composite::Named { parameters, .. } => parameters.into_iter(),
             Composite::Unnamed { parameters, .. } => parameters.into_iter(),
+            _ => Punctuated::<ParameterKind, ()>::new().into_iter(),
         }
     }
 }

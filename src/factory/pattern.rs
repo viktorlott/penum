@@ -80,6 +80,9 @@ pub enum Composite {
 
     /// Represents a `Unit`-like pattern
     Unit,
+
+    /// Represents a `Inferred` pattern
+    Inferred,
 }
 
 /// A parameter comes in different flavors:
@@ -119,6 +122,9 @@ pub enum ParameterKind {
     /// Variadic(Token![..]) > Range(ExprRange)
     /// ```
     Range(ExprRange),
+
+    /// Used to indicate that all parameter types should be inferred
+    Inferred,
 
     /// Suppose to be used for derived Default
     Nothing,
@@ -241,7 +247,7 @@ impl Composite {
         match self {
             Composite::Named { parameters, .. } => parameters.len(),
             Composite::Unnamed { parameters, .. } => parameters.len(),
-            Composite::Unit => 0,
+            _ => 0,
         }
     }
 
@@ -249,6 +255,8 @@ impl Composite {
         thread_local! {static EMPTY_SLICE_ITER: Punctuated<ParameterKind, ()> = Punctuated::new();}
 
         match self {
+            Composite::Named { parameters, .. } => parameters.iter(),
+            Composite::Unnamed { parameters, .. } => parameters.iter(),
             // "SAFETY": This is not recommended. The thing is that we
             //           are transmuting an empty iter that is created
             //           from a static Punctuated struct. The lifetime
@@ -261,9 +269,7 @@ impl Composite {
             //           because of the if statement in
             //           `penum::assemble->is_unit()->continue`. So this
             //           could also be marked as `unreachable`.
-            Composite::Unit => EMPTY_SLICE_ITER.with(|f| unsafe { std::mem::transmute(f.iter()) }),
-            Composite::Named { parameters, .. } => parameters.iter(),
-            Composite::Unnamed { parameters, .. } => parameters.iter(),
+            _ => EMPTY_SLICE_ITER.with(|f| unsafe { std::mem::transmute(f.iter()) }),
         }
     }
 
@@ -275,7 +281,7 @@ impl Composite {
         match self {
             Composite::Named { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
             Composite::Unnamed { parameters, .. } => parameters.iter().any(|fk| fk.is_variadic()),
-            Composite::Unit => false,
+            _ => false,
         }
     }
 
@@ -289,7 +295,7 @@ impl Composite {
                 .iter()
                 .enumerate()
                 .find_map(|(pos, fk)| fk.is_variadic().then_some(pos)),
-            Composite::Unit => None,
+            _ => None,
         }
     }
 
@@ -301,7 +307,7 @@ impl Composite {
             Composite::Unnamed { parameters, .. } => {
                 matches!(parameters.iter().last().take(), Some(val) if val.is_variadic())
             }
-            Composite::Unit => false,
+            _ => false,
         }
     }
 
@@ -317,7 +323,7 @@ impl Composite {
                     .iter()
                     .fold(0, |acc, fk| if f(fk) { acc + 1 } else { acc })
             }
-            Composite::Unit => 0,
+            _ => 0,
         }
     }
 }

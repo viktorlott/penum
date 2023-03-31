@@ -27,9 +27,11 @@ enum Foo {
     Bor(i32),
 }
 
-#[penum( we where i32: Trait )]
+#[penum( _ where i32: Trait )]
 enum B {
-    Some,
+    V1(usize),
+    V2(usize, i32),
+    V3(usize, usize, i32),
 }
 
 enum Opt<T> {
