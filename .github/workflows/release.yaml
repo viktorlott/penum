@@ -5,10 +5,9 @@ permissions:
 
 on:
   workflow_dispatch:
-  # workflow_run:
-  #   workflows: ["Tag"]
-  #   types:
-  #     - "completed"
+  push:
+    tags:
+      - '*'
 
 jobs:
   changelog:
@@ -37,7 +36,7 @@ jobs:
         with:
           file: penum-logo.png
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          release_name: Release $tag
+          release_name: Release ${{ github.ref }}
           tag: ${{ github.ref }}
           body: ${{ steps.git-cliff.outputs.content }}
 
