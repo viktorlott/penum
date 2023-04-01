@@ -1,13 +1,73 @@
+use quote::{ToTokens, TokenStreamExt};
 use syn::{
     braced, parenthesized,
     parse::{Parse, ParseStream},
-    token, Field, Ident, LitInt, LitStr, Token,
+    parse_quote, token, Field, Ident, LitInt, LitStr, Token, Type,
 };
+
+use crate::factory::{TraitBound, WhereClause};
 
 use super::{PatComposite, PatFieldKind, PatFrag, PenumExpr};
 
+struct ImplExpr {
+    impl_token: token::Impl,
+    trait_bound: TraitBound,
+    for_token: token::For,
+    ty: Type,
+}
+
+impl Parse for ImplExpr {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(Self {
+            impl_token: input.parse()?,
+            trait_bound: input.parse()?,
+            for_token: input.parse()?,
+            ty: input.parse()?,
+        })
+    }
+}
+
+impl ToTokens for ImplExpr {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let Self {
+            trait_bound, ty, ..
+        } = self;
+        quote::quote!(where #ty: #trait_bound).to_tokens(tokens);
+    }
+}
+
 impl Parse for PenumExpr {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        if input.peek(LitStr) {
+            let pat: LitStr = input.parse()?;
+            let penum: PenumExpr = pat.parse_with(PenumExpr::parse)?;
+            return Ok(penum);
+        }
+
+        if input.peek(token::Where) || input.peek(token::For) || input.peek(token::Impl) {
+            if ImplExpr::parse(&input.fork()).is_ok() {
+                let impl_expr: ImplExpr = input.parse()?;
+                let impl_expr = impl_expr.to_token_stream();
+                let clause: WhereClause = parse_quote!(#impl_expr);
+
+                return Ok(Self {
+                    pattern: vec![PatFrag {
+                        ident: None,
+                        group: PatComposite::Inferred,
+                    }],
+                    clause: Some(clause),
+                });
+            }
+
+            return Ok(Self {
+                pattern: vec![PatFrag {
+                    ident: None,
+                    group: PatComposite::Inferred,
+                }],
+                clause: Some(input.parse()?),
+            });
+        }
+
         if input.peek(Ident) && input.peek2(token::Eq) {
             let _: Ident = input.parse()?;
             let _: token::Eq = input.parse()?;
@@ -15,12 +75,6 @@ impl Parse for PenumExpr {
             if input.peek(token::Gt) {
                 let _: token::Gt = input.parse()?;
             }
-        }
-
-        if input.peek(LitStr) {
-            let pat: LitStr = input.parse()?;
-            let penum: PenumExpr = pat.parse_with(PenumExpr::parse)?;
-            return Ok(penum);
         }
 
         Ok(Self {

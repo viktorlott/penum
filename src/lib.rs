@@ -89,8 +89,8 @@ pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
         return output;
     }
 
-    let input = parse_macro_input!(input as Subject);
     let pattern = parse_macro_input!(attr as PenumExpr);
+    let input = parse_macro_input!(input as Subject);
 
     let penum = Penum::from(pattern, input).assemble();
 

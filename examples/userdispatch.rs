@@ -73,6 +73,17 @@ impl<T: Default> Static<T> {
     }
 }
 
+#[penum(impl ^AsRef<str> for String)]
+enum Store {
+    V0(),
+    V1(i32),
+    V2(String, i32),
+    V3(i32, usize, String),
+    V4(i32, String, usize),
+    V5 { name: String, age: usize },
+    V6,
+}
+
 fn main() {
     // let foo_a = Foo::V1(Al);
     // let foo_b = Foo::V2(Be(2));

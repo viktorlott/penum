@@ -60,12 +60,12 @@ $ cargo add penum
 ## Overview 
 A `Penum` expression can look like this:
 ```console
-                      Dispatch symbol
+                      Dispatch symbol.
                       |
 #[penum( (T) where T: ^Trait )]
          ^^^       ^^^^^^^^^
          |         |
-         |         Predicate bound
+         |         Predicate bound.
          |
          Pattern fragment.
 ```
@@ -96,45 +96,50 @@ the field type `Storage` and `Something` implements the trait `Trait`.
 The goal is to be able to call the trait `method` through `Foo`. This
 can be accomplished automatically by marking the trait with a dispatch
 symbol `^`.
+
+```rust
+#[penum(impl String: ^AsRef<str>)]
+enum Store {
+    V0(),
+    V1(i32),
+    V2(String, i32),
+    V3(i32, usize, String),
+    V4(i32, String, usize),
+    V5 { age: usize, name: String },
+    V6,
+}
+```
+- Will turn into this:
+```rust
+impl AsRef<str> for Store {
+    fn as_ref(&self) -> &str {
+        match self {
+            Store::V2(val, ..) => val.as_ref(),
+            Store::V3(_, _, val) => val.as_ref(),
+            Store::V4(_, val, ..) => val.as_ref(),
+            Store::V5 { name, .. } => name.as_ref(),
+            _ => "",
+        }
+    }
+}
+```
+
+There is also support for user defined traits, but make sure that they
+are tagged before the enum.
 ```rust
 #[penum]
 trait Trait {
     fn method(&self, text: &str) -> &Option<&str>;
 }
 
-#[penum{ unit | (T) | (_, T) where T: ^Trait }]
-enum Foo {
-    V1(Storage), 
-    V2(i32, Something), 
-    V3
+#[penum( unit | (T) where T: Trait )]
+enum State {
+    Idle,
+    Start,
+    Stale,
+    Stop(usize),
 }
 ```
-
-- Will turn into this:
-```rust
-impl Trait for Foo {
-    fn method(&self, text: &str) -> &Option<&str> {
-        match self {
-            V1(val) => val.method(text),
-            V2(_, val) => val.method(text),
-            _ => &None
-        }
-    }
-}
-```
-
-<details>
-<summary>Boilerplate code for the example above</summary>
-
-```rust
-    struct Storage;
-    struct Something;
-
-    impl Trait for Storage { ... }
-    impl Trait for Something { ... }
-```
-
-</details>
 
 
 ## Examples
@@ -206,6 +211,17 @@ impl AsInner<i32> for Foo {
 }
 ```
 
+It's identical to this:
+```rust
+#[penum(impl Ce: ^Special, Be: ^AsInner<i32>)]
+enum Foo {
+    V1(Al),
+    V2(i32, Be),
+    V3(Ce),
+    V4 { name: String, age: Be },
+}
+```
+
 
 
 #### Details
@@ -225,6 +241,35 @@ impl AsInner<i32> for Foo {
   types. Like placeholders, they are a way to express that we don't care
   about the rest of the parameters in a pattern. The look something like
   this`(T, U, ..) | {num: T, ..}`.
+
+#### New syntax
+```rust
+    #[penum(impl ^AsRef<str> for String)] 
+
+    #[penum(impl String: ^AsRef<str> )]
+
+    #[penum(for String: ^AsRef<str>, i32: ^AsRef<i32> )]
+
+    #[penum(where String: ^AsRef<str> )]
+
+```
+
+```console
+#[penum( impl Type: ^Trait )]
+         ^^^^ ^^^^^^^^^^^^
+         |    |
+         |    Predicate bound.
+         |
+         Shorthand for `_ where` expression.
+
+
+#[penum( impl ^Trait for Type )]
+         ^^^^ ^^^^^^     ^^^^
+         |    |          |
+         |    Predicate bound.
+         |
+         Shorthand for `_ where` expression.
+```
 
 
 |   Traits   |   Supported   |

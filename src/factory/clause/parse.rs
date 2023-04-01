@@ -1,3 +1,4 @@
+use proc_macro2::Span;
 use syn::{
     parenthesized,
     parse::{Parse, ParseStream, Result},
@@ -10,8 +11,18 @@ use super::*;
 
 impl Parse for WhereClause {
     fn parse(input: ParseStream) -> Result<Self> {
+        let where_token: token::Where = if input.peek(token::Impl) {
+            let _: token::Impl = input.parse()?;
+            token::Where(Span::call_site())
+        } else if input.peek(token::For) {
+            let _: token::For = input.parse()?;
+            token::Where(Span::call_site())
+        } else {
+            input.parse()?
+        };
+
         Ok(WhereClause {
-            where_token: input.parse()?,
+            where_token,
             predicates: {
                 let mut predicates = Punctuated::new();
                 loop {
