@@ -22,9 +22,6 @@ that expresses how we should interpret the enum. It's a tool for
 asserting how enums should **look** and **behave** through simple
 expressive rust grammar.
 
-<details>
-<summary>More details</summary>
-
 - **Patterns** — can be thought of as a *toy shape sorter* that sorts
   through enum variants and makes sure they fit. So each variant has a
   certain shape that must satisfy the patterns we've specified. There
@@ -38,17 +35,7 @@ expressive rust grammar.
 
 - **Smart dispatch** — lets us express how an enum should **behave** in
   respect to its variants. The symbol that is used to express this is
-  `^` and should be put in front of the trait you wish to be dispatched,
-  e.g. `(T) where T: ^AsRef<str>`. The dispatcher is smart enough to
-  figure out certain return types for methods such that non-matching
-  variants can be assigned with a *default* return statement. i.e types
-  like `Option<_>`, `Result<_, E>` and many other types (*including
-  Primitive Types*) can get defaulted automatically for us instead of
-  returning them with panic. *This is currently limited to rust std
-  library traits, but there are plans to extend support for custom trait
-  definitions soon.*
-
-</details>
+  `^` and should be put in front of the trait you wish to be dispatched.
 
 ## Installation
 This crate is available on [crates.io](https://crates.io/crates/penum)
@@ -62,70 +49,50 @@ Or run this command in your cargo project:
 $ cargo add penum
 ```
 ## Overview 
-`Penum` is smart enough to infer certain return types for non-matching
-variants. e.g `Option<T>`, `&Option<T>`, `String`, `&str`. It can even
-handle `&String`, referenced non-const types. The goal is to support any
-type, which we could potentially do by checking for types implementing
-the `Default` trait.
-
-Note, when dispatching traits with associated types, it's important to
-declare them. e.g `Add<i32, Output = i32>`.
 
 A `Penum` expression can look like this:
-```rust
-//                    Dispatch symbol.
-//                    |
+```console
+                      Dispatch symbol.
+                      |
 #[penum( (T) where T: ^Trait )]
-//       ^^^       ^^^^^^^^^
-//       |         |
-//       |         Predicate bound.
-//       |
-//       Pattern fragment.
+         ^^^       ^^^^^^^^^
+         |         |
+         |         Predicate bound.
+         |
+         Pattern fragment.
 ```
-<details>
-<summary>Alternative syntax</summary>
 
+A `Penum` expression without specifying a pattern:
+```console
+#[penum( impl Trait for Type )]
+         ^^^^^^^^^^^^^^^^^^^
+```
+*Shorthand syntax for `_ where Type: ^Trait`*
+
+<details>
+<summary>More details</summary>
+
+Important to include `^` for traits that you want to dispatch.
 ```rust
 #[penum( impl Type: ^Trait )]
-//       ^^^^ 
-//       |
-//       Shorthand for `_ where` expression which allows `+` bounds.
 ```
 
+Note that in a penum impl for expression, no `^` is needed.
 ```rust
-#[penum( impl ^Trait for Type )]
-//       ^^^^        ^^^
-//       |           |
-//       Shorthand for `_ where Type: ^Trait` expression.
-//       Useful when you only want to implement one trait at the time.
+#[penum( impl Trait for Type )]
+```
+In Rust 1.68.0, `From<bool>` for `{f32,f64}` has stabilized. 
+That means you can do this.
+```rust
+#[penum( impl From<bool> for {f32,f64} )]
 ```
 
 </details>
 
+<br />
 
-### Trivial example:
-Here we have an enum with one unary and one binary tuple variant where
-the field type `Storage` and `Something` implements the trait `Trait`.
-The goal is to be able to call the trait `method` through `Foo`. This
-can be accomplished automatically by marking the trait with a dispatch
-symbol `^`.
-
-<details>
-<summary>Supported std traits</summary>
-
-`Any`, `Borrow`, `BorrowMut`, `Eq`, `AsMut`, `AsRef`, `From`, `Into`,
-`TryFrom`, `TryInto`, `Default`, `Binary`, `Debug`, `Display`,
-`LowerExp`, `LowerHex`, `Octal`, `Pointer`, `UpperExp`, `UpperHex`,
-`Future`, `IntoFuture`, `FromIterator`, `FusedIterator`, `IntoIterator`,
-`Product`, `Sum`, `Copy`, `Sized`, `ToSocketAddrs`, `Add`, `AddAssign`,
-`BitAnd`, `BitAndAssign`, `BitOr`, `BitOrAssign`, `BitXor`,
-`BitXorAssign`, `Deref`, `DerefMut`, `Div`, `DivAssign`, `Drop`, `Fn`,
-`FnMut`, `FnOnce`, `Index`, `IndexMut`, `Mul`, `MulAssign`,
-`MultiMethod`, `Neg`, `Not`, `Rem`, `RemAssign`, `Shl`, `ShlAssign`,
-`Shr`, `ShrAssign`, `Sub`, `SubAssign`, `Termination`, `SliceIndex`,
-`FromStr`, `ToString`
-
-</details>
+### Trivial example
+Use `Penum` to automatically `implement` a trait for the enum. 
 
 ```rust
 #[penum(impl String: ^AsRef<str>)]
@@ -163,14 +130,32 @@ trait Trait {
 }
 ```
 
-<details>
-<summary>Under development</summary>
+<br />
 
-For non-std types we rely on the `Default` trait, which means, if we can
-prove that a type implements `Default` we can automatically add them as
-return types for non-matching variants,
+<details>
+<summary>Supported std traits</summary>
+
+`Any`, `Borrow`, `BorrowMut`, `Eq`, `AsMut`, `AsRef`, `From`, `Into`,
+`TryFrom`, `TryInto`, `Default`, `Binary`, `Debug`, `Display`,
+`LowerExp`, `LowerHex`, `Octal`, `Pointer`, `UpperExp`, `UpperHex`,
+`Future`, `IntoFuture`, `FromIterator`, `FusedIterator`, `IntoIterator`,
+`Product`, `Sum`, `Sized`, `ToSocketAddrs`, `Add`, `AddAssign`,
+`BitAnd`, `BitAndAssign`, `BitOr`, `BitOrAssign`, `BitXor`,
+`BitXorAssign`, `Deref`, `DerefMut`, `Div`, `DivAssign`, `Drop`,
+`Index`, `IndexMut`, `Mul`, `MulAssign`, `MultiMethod`, `Neg`, `Not`,
+`Rem`, `RemAssign`, `Shl`, `ShlAssign`, `Shr`, `ShrAssign`, `Sub`,
+`SubAssign`, `Termination`, `SliceIndex`, `FromStr`, `ToString`
 
 </details>
+
+`Penum` is smart enough to infer certain return types for non-matching
+variants. e.g `Option<T>`, `&Option<T>`, `String`, `&str`. It can even
+handle `&String`, referenced non-const types. The goal is to support any
+type, which we could potentially do by checking for types implementing
+the `Default` trait.
+
+Note, when dispatching traits with associated types, it's important to
+declare them. e.g `Add<i32, Output = i32>`.
 
 ## Examples
 Used penum to force every variant to be a tuple with one field that must
@@ -211,6 +196,19 @@ enum Guard {
 If you don't care about the actual pattern matching, then you could use
 `_` to automatically infer every shape and field. Combine this with
 concrete dispatch types, and you got yourself a auto dispatcher.
+
+
+<details>
+<summary>Under development</summary>
+
+For non-std types we rely on the `Default` trait, which means, if we can
+prove that a type implements `Default` we can automatically add them as
+return types for non-matching variants,
+
+</details>
+
+
+
 ```rust
 #[penum( _ where Ce: ^Special, Be: ^AsInner<i32> )]
 enum Foo {
@@ -263,3 +261,16 @@ impl AsInner<i32> for Foo {
   types. Like placeholders, they are a way to express that we don't care
   about the rest of the parameters in a pattern. The look something like
   this`(T, U, ..) | {num: T, ..}`.
+
+
+
+
+  <!-- ,
+  e.g. `(T) where T: ^AsRef<str>`. The dispatcher is smart enough to
+  figure out certain return types for methods such that non-matching
+  variants can be assigned with a *default* return statement. i.e types
+  like `Option<_>`, `Result<_, E>` and many other types (*including
+  Primitive Types*) can get defaulted automatically for us instead of
+  returning them with panic. *This is currently limited to rust std
+  library traits, but there are plans to extend support for custom trait
+  definitions soon.* -->

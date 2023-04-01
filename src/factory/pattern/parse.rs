@@ -1,3 +1,4 @@
+use proc_macro2::{Span, TokenStream};
 use syn::{
     braced, parenthesized,
     parse::{Parse, ParseStream},
@@ -12,16 +13,49 @@ struct ImplExpr {
     impl_token: token::Impl,
     trait_bound: TraitBound,
     for_token: token::For,
-    ty: Type,
+    tys: Vec<Type>,
 }
 
 impl Parse for ImplExpr {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(Self {
             impl_token: input.parse()?,
-            trait_bound: input.parse()?,
+            trait_bound: {
+                let mut tb: TraitBound = input.parse()?;
+
+                // Always dispatch for impl expressions
+                if tb.dispatch.is_none() {
+                    tb.dispatch = Some(token::Caret(Span::call_site()));
+                }
+
+                tb
+            },
             for_token: input.parse()?,
-            ty: input.parse()?,
+            tys: {
+                if input.peek(token::Brace) {
+                    let content;
+                    let _ = braced!(content in input);
+                    let mut tys = vec![];
+
+                    loop {
+                        if content.is_empty() {
+                            break;
+                        }
+
+                        let ty: Type = content.parse()?;
+                        tys.push(ty);
+
+                        if !content.peek(token::Comma) {
+                            break;
+                        } else {
+                            let _: token::Comma = content.parse()?;
+                        }
+                    }
+                    tys
+                } else {
+                    vec![input.parse()?]
+                }
+            },
         })
     }
 }
@@ -29,9 +63,20 @@ impl Parse for ImplExpr {
 impl ImplExpr {
     fn into_clause(self) -> WhereClause {
         let Self {
-            trait_bound, ty, ..
+            trait_bound, tys, ..
         } = self;
-        syn::parse_quote!(where #ty: #trait_bound)
+
+        let mut bounds = TokenStream::new();
+
+        for (index, ty) in tys.iter().enumerate() {
+            bounds.extend(quote::quote!(#ty: #trait_bound));
+
+            if index != tys.len() - 1 {
+                bounds.extend(quote::quote!(,));
+            }
+        }
+
+        syn::parse_quote!(where #bounds)
     }
 }
 

@@ -195,12 +195,12 @@ impl Penum<Disassembled> {
                     // TODO: Refactor into TypeId instead.
                     let item_ty_string = item_field.ty.get_string();
 
-                    // No point of continuing if we have errors or
-                    // unique_impl_id is empty
                     if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
                         let bounds = &ty_impl_trait.bounds;
 
                         let Some(impl_string) = create_impl_string(bounds, &mut self.error) else {
+                            // No point of continuing if we have errors or
+                            // unique_impl_id is empty
                             // Add debug logs
                             continue;
                         };

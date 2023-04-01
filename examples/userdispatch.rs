@@ -73,14 +73,27 @@ impl<T: Default> Static<T> {
     }
 }
 
-#[penum(impl ^AsRef<str> for String)]
+struct Inner(String);
+
+impl AsRef<str> for Inner {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+#[penum(impl AsRef<str> for {String,Inner})]
 enum Store {
-    V0(),
+    V0(Inner),
+
+    // #[as_ref("Tuple")]
     V1(i32),
+
     V2(String, i32),
     V3(i32, usize, String),
     V4(i32, String, usize),
     V5 { name: String, age: usize },
+
+    // #[as_ref("Unit")]
     V6,
 }
 
