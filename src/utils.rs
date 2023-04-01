@@ -39,6 +39,9 @@ where
     UniqueHashId<V>: Ord,
 {
     pub fn polymap_insert(&mut self, pty: UniqueHashId<K>, ity: UniqueHashId<V>) {
+        // First we check if pty (T) exists in
+        // polymorphicmap. If it exists, insert new
+        // concrete type.
         if let Some(set) = self.0.get_mut(&pty) {
             set.insert(ity);
         } else {
@@ -77,6 +80,7 @@ impl<T> Static<T> {
         Self(UnsafeCell::new(None), Once::new(), func)
     }
     pub fn get(&self) -> &'static T {
+        // SAFETY: Read [dispatch/ret.rs:23]
         self.1
             .call_once(|| unsafe { *self.0.get() = Some(self.2()) });
         unsafe { (*self.0.get()).as_ref().unwrap_unchecked() }
@@ -151,7 +155,7 @@ pub fn lifetime_not_permitted() -> &'static str {
     "Lifetime annotation not permitted"
 }
 
-pub fn into_unique_ident(value: &str, tag: &Ident, span: Span) -> Ident {
+pub fn create_unique_ident(value: &str, tag: &Ident, span: Span) -> Ident {
     format_ident!("_{}_{}", tag, value, span = span)
 }
 

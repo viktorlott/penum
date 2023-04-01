@@ -27,7 +27,7 @@ use syn::TypeParam;
 use crate::factory::TraitBound;
 use crate::utils::UniqueHashId;
 
-use super::ret::handle_default_ret_type;
+use super::ret::return_default_ret_type;
 use super::ret::return_panic;
 use super::T_SHM;
 
@@ -139,7 +139,7 @@ impl<'bound> Blueprint<'bound> {
                 let default_return = match signature.output.borrow() {
                     syn::ReturnType::Default => quote::quote!(()),
                     syn::ReturnType::Type(_, ty) => {
-                        handle_default_ret_type(ty).unwrap_or_else(return_panic)
+                        return_default_ret_type(ty).unwrap_or_else(return_panic)
                     }
                 };
 

@@ -29,7 +29,7 @@ use crate::factory::WherePredicate;
 use crate::dispatch::VariantSignature;
 use crate::error::Diagnostic;
 
-use crate::utils::into_unique_ident;
+use crate::utils::create_unique_ident;
 use crate::utils::lifetime_not_permitted;
 use crate::utils::maybe_bounds_not_permitted;
 use crate::utils::no_match_found;
@@ -139,14 +139,12 @@ impl Penum<Disassembled> {
 
                 // 1. Check if we match in `shape`
                 let Some(matched_pair) = comparable_pats.compare(&comp_item) else {
-                    let (span, message) = if comp_item.inner.is_empty() {
-                        (variant_ident.span(), no_match_found(variant_ident, &pattern_fmt))
-                    } else {
-                        (comp_item.inner.span(), no_match_found(comp_item.inner, &pattern_fmt))
-                    };
-
+                    let (span, message) = eor!(
+                        comp_item.inner.is_empty(),
+                            (variant_ident.span(), no_match_found(variant_ident, &pattern_fmt)),
+                            (comp_item.inner.span(), no_match_found(comp_item.inner, &pattern_fmt))
+                        );
                     self.error.extend(span, message);
-
                     continue
                 };
 
@@ -196,11 +194,11 @@ impl Penum<Disassembled> {
                     // TODO: Refactor into TypeId instead.
                     let item_ty_string = item_field.ty.get_string();
 
+                    // No point of continuing if we have errors or
+                    // unique_impl_id is empty
                     if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
                         let bounds = &ty_impl_trait.bounds;
 
-                        // No point in continuing if we have errors or
-                        // unique_impl_id is empty
                         let Some(impl_string) = create_impl_string(bounds, &mut self.error) else {
                             // Add debug logs
                             continue;
@@ -208,7 +206,7 @@ impl Penum<Disassembled> {
 
                         // TODO: Add support for impl dispatch
                         let unique_impl_id =
-                            into_unique_ident(&impl_string, variant_ident, ty_impl_trait.span());
+                            create_unique_ident(&impl_string, variant_ident, ty_impl_trait.span());
 
                         predicates.push(parse_quote!(#unique_impl_id: #bounds));
 
@@ -240,9 +238,6 @@ impl Penum<Disassembled> {
                         };
 
                         for ty_unique in [pat_ty_unique, item_ty_unique.clone()] {
-                            // First we check if pty (T) exists in
-                            // polymorphicmap. If it exists, insert new
-                            // concrete type.
                             self.types.polymap_insert(ty_unique, item_ty_unique.clone());
                         }
 
@@ -274,22 +269,25 @@ impl Penum<Disassembled> {
             }
 
             // Assemble all our impl statements
-            if let Some(bp_map) = maybe_blueprint_map {
-                bp_map.for_each_blueprint(|bp| {
-                    let path = bp.get_sanatized_impl_path();
-                    let methods = bp.get_associated_methods();
+            if let Some(blueprints) = maybe_blueprint_map {
+                let (impl_generics, ty_generics, where_clause) =
+                    &self.subject.generics.split_for_impl();
 
-                    let assocs = bp.get_mapped_bindings().map(|bind| {
+                blueprints.for_each_blueprint(|blueprint| {
+                    let trait_path = blueprint.get_sanatized_impl_path();
+                    let assoc_methods = blueprint.get_associated_methods();
+
+                    let assoc_types = blueprint.get_mapped_bindings().map(|bind| {
                         bind.iter()
                             .map(|b| b.to_token_stream())
                             .collect::<TokenStream2>()
                     });
 
                     let implementation: ItemImpl = parse_quote!(
-                        impl #path for #enum_ident {
-                            #assocs
+                        impl #impl_generics #trait_path for #enum_ident #ty_generics #where_clause {
+                            #assoc_types
 
-                            #(#methods)*
+                            #(#assoc_methods)*
                         }
                     );
                     self.impls.push(implementation);
@@ -448,3 +446,15 @@ fn create_impl_string<'a>(
         Some(impl_string)
     }
 }
+
+macro_rules! eor {
+    ($x:expr, $left:expr, $right:expr) => {
+        if $x {
+            $left
+        } else {
+            $right
+        }
+    };
+}
+
+pub(self) use eor;

@@ -50,7 +50,7 @@ fn static_return<T: ToTokens + Spanned>(ty: &T) -> TokenStream {
 
 // We could use Visitor pattern here, but it was easier to do it like
 // this. TODO: Refactor please
-pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
+pub fn return_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
     let mut tokens = TokenStream::new();
     let mut is_ref = false;
     loop {
@@ -97,7 +97,7 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
                                 if let Some(GenericArgument::Type(err_ty)) = abga.args.last() {
                                     // FIXME: Search `err_ty` and check
                                     // if it implements Default.
-                                    if let Some(toks) = handle_default_ret_type(err_ty) {
+                                    if let Some(toks) = return_default_ret_type(err_ty) {
                                         tokens.extend(quote::quote!(Err(#toks)));
                                         return Some(tokens);
                                     } else {
@@ -148,7 +148,7 @@ pub fn handle_default_ret_type(mut ty: &Type) -> Option<TokenStream> {
                 let mut group = TokenStream::new();
 
                 for (i, ty) in tuple.elems.iter().enumerate() {
-                    if let Some(tokens) = handle_default_ret_type(ty) {
+                    if let Some(tokens) = return_default_ret_type(ty) {
                         group.extend(tokens);
                     } else {
                         return None;
@@ -178,13 +178,13 @@ pub fn return_panic() -> TokenStream {
 
 #[cfg(test)]
 mod tests {
-    use crate::dispatch::ret::handle_default_ret_type;
+    use crate::dispatch::ret::return_default_ret_type;
     use syn::{parse_quote, Type};
 
     #[test]
     fn owned_result() {
         let ty: Type = parse_quote!(Result<T, String>);
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!("Err (\"\" . to_string ())", result.as_str())
     }
@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn ref_result() {
         let ty: Type = parse_quote!(&Result<T, String>);
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!("& Err (\"\" . to_string ())", result.as_str())
     }
@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn owned_option() {
         let ty: Type = parse_quote!(Option<T>);
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!("None", result.as_str())
     }
@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn ref_option() {
         let ty: Type = parse_quote!(&Option<T>);
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!("& None", result.as_str())
     }
@@ -216,7 +216,7 @@ mod tests {
     #[test]
     fn ref_tuple_ref_option_and_option() {
         let ty: Type = parse_quote!(&(&Option<T>, Option<T>));
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!("& (& None , None)", result.as_str())
     }
@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn ref_char() {
         let ty: Type = parse_quote!(&char);
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!("'\\x00'", result.as_str())
     }
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn owned_bool() {
         let ty: Type = parse_quote!(bool);
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!("false", result.as_str())
     }
@@ -240,7 +240,7 @@ mod tests {
     #[test]
     fn ref_bool() {
         let ty: Type = parse_quote!(&bool);
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!("& false", result.as_str())
     }
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn owned_string() {
         let ty: Type = parse_quote!(String);
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!("\"\" . to_string ()", result.as_str())
     }
@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn ref_string() {
         let ty: Type = parse_quote!(&String);
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!("{ use std :: cell :: UnsafeCell ; use std :: sync :: Once ; struct Static < T : Default > (UnsafeCell < Option < T >> , Once) ; unsafe impl < T : Default > Sync for Static < T > { } impl < T : Default > Static < T > { pub const fn new () -> Self { Self (UnsafeCell :: new (None) , Once :: new ()) } fn get (& self) -> & 'static T { self . 1 . call_once (|| unsafe { * self . 0 . get () = Some (T :: default ()) }) ; unsafe { (* self . 0 . get ()) . as_ref () . unwrap_unchecked () } } } static RETURN : Static < String > = Static :: new () ; RETURN . get () }", result.as_str())
     }
@@ -265,7 +265,7 @@ mod tests {
     fn tuple_numbers() {
         let ty: Type =
             parse_quote!((u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize));
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!(
             "(0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0)",
@@ -277,7 +277,7 @@ mod tests {
     fn ref_tuple_numbers() {
         let ty: Type =
             parse_quote!(&(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize));
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!(
             "& (0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0)",
@@ -290,7 +290,7 @@ mod tests {
         let ty: Type = parse_quote!(&(
             &u8, &u16, &u32, &u64, &u128, &usize, &i8, &i16, &i32, &i64, &i128, &isize
         ));
-        let result = handle_default_ret_type(&ty).expect("to parse").to_string();
+        let result = return_default_ret_type(&ty).expect("to parse").to_string();
 
         assert_eq!(
             "& (& 0 , & 0 , & 0 , & 0 , & 0 , & 0 , & 0 , & 0 , & 0 , & 0 , & 0 , & 0)",
