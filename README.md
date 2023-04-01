@@ -51,7 +51,7 @@ This crate is available on [crates.io](https://crates.io/crates/penum)
 and can be used by adding the following to your project's Cargo.toml:
 ```toml
 [dependencies]
-penum = "0.1.21"
+penum = "0.1.22"
 ```
 Or run this command in your cargo project:
 ```sh
