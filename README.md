@@ -17,10 +17,13 @@
 </div>
 
 `penum` is a procedural macro that is used for **enum conformity** and
-**automatic dispatch**. This is done by specifying a declarative pattern
+**static dispatch**. This is done by specifying a declarative pattern
 that expresses how we should interpret the enum. It's a tool for
 asserting how enums should **look** and **behave** through simple
 expressive rust grammar.
+
+<details>
+<summary>More details</summary>
 
 - **Patterns** — can be thought of as a *toy shape sorter* that sorts
   through enum variants and makes sure they fit. So each variant has a
@@ -31,8 +34,7 @@ expressive rust grammar.
 - **Predicates** — are used in combination with *patterns* to assert
   what the matched variants field types should implement. They can be
   expressed like a regular where clause, e.g `where T: Trait<Type>`. The
-  *generic parameters* needs to be introduced inside a pattern
-  fragment.
+  *generic parameters* needs to be introduced inside a pattern fragment.
 
 - **Smart dispatch** — lets us express how an enum should **behave** in
   respect to its variants. The symbol that is used to express this is
@@ -46,6 +48,8 @@ expressive rust grammar.
   library traits, but there are plans to extend support for custom trait
   definitions soon.*
 
+</details>
+
 ## Installation
 This crate is available on [crates.io](https://crates.io/crates/penum)
 and can be used by adding the following to your project's Cargo.toml:
@@ -58,20 +62,6 @@ Or run this command in your cargo project:
 $ cargo add penum
 ```
 ## Overview 
-A `Penum` expression can look like this:
-```console
-                      Dispatch symbol.
-                      |
-#[penum( (T) where T: ^Trait )]
-         ^^^       ^^^^^^^^^
-         |         |
-         |         Predicate bound.
-         |
-         Pattern fragment.
-```
-*Note that there can be multiple patterns fragments and predicate
-bounds.*
-
 `Penum` is smart enough to infer certain return types for non-matching
 variants. e.g `Option<T>`, `&Option<T>`, `String`, `&str`. It can even
 handle `&String`, referenced non-const types. The goal is to support any
@@ -81,14 +71,37 @@ the `Default` trait.
 Note, when dispatching traits with associated types, it's important to
 declare them. e.g `Add<i32, Output = i32>`.
 
+A `Penum` expression can look like this:
+```rust
+//                    Dispatch symbol.
+//                    |
+#[penum( (T) where T: ^Trait )]
+//       ^^^       ^^^^^^^^^
+//       |         |
+//       |         Predicate bound.
+//       |
+//       Pattern fragment.
+```
 <details>
-<summary>Under development</summary>
+<summary>Alternative syntax</summary>
 
-For non-std types we rely on the `Default` trait, which means, if we can
-prove that a type implements `Default` we can automatically add them as
-return types for non-matching variants,
+```rust
+#[penum( impl Type: ^Trait )]
+//       ^^^^ 
+//       |
+//       Shorthand for `_ where` expression which allows `+` bounds.
+```
+
+```rust
+#[penum( impl ^Trait for Type )]
+//       ^^^^        ^^^
+//       |           |
+//       Shorthand for `_ where Type: ^Trait` expression.
+//       Useful when you only want to implement one trait at the time.
+```
 
 </details>
+
 
 ### Trivial example:
 Here we have an enum with one unary and one binary tuple variant where
@@ -96,6 +109,23 @@ the field type `Storage` and `Something` implements the trait `Trait`.
 The goal is to be able to call the trait `method` through `Foo`. This
 can be accomplished automatically by marking the trait with a dispatch
 symbol `^`.
+
+<details>
+<summary>Supported std traits</summary>
+
+`Any`, `Borrow`, `BorrowMut`, `Eq`, `AsMut`, `AsRef`, `From`, `Into`,
+`TryFrom`, `TryInto`, `Default`, `Binary`, `Debug`, `Display`,
+`LowerExp`, `LowerHex`, `Octal`, `Pointer`, `UpperExp`, `UpperHex`,
+`Future`, `IntoFuture`, `FromIterator`, `FusedIterator`, `IntoIterator`,
+`Product`, `Sum`, `Copy`, `Sized`, `ToSocketAddrs`, `Add`, `AddAssign`,
+`BitAnd`, `BitAndAssign`, `BitOr`, `BitOrAssign`, `BitXor`,
+`BitXorAssign`, `Deref`, `DerefMut`, `Div`, `DivAssign`, `Drop`, `Fn`,
+`FnMut`, `FnOnce`, `Index`, `IndexMut`, `Mul`, `MulAssign`,
+`MultiMethod`, `Neg`, `Not`, `Rem`, `RemAssign`, `Shl`, `ShlAssign`,
+`Shr`, `ShrAssign`, `Sub`, `SubAssign`, `Termination`, `SliceIndex`,
+`FromStr`, `ToString`
+
+</details>
 
 ```rust
 #[penum(impl String: ^AsRef<str>)]
@@ -131,16 +161,16 @@ are tagged before the enum.
 trait Trait {
     fn method(&self, text: &str) -> &Option<&str>;
 }
-
-#[penum( unit | (T) where T: Trait )]
-enum State {
-    Idle,
-    Start,
-    Stale,
-    Stop(usize),
-}
 ```
 
+<details>
+<summary>Under development</summary>
+
+For non-std types we rely on the `Default` trait, which means, if we can
+prove that a type implements `Default` we can automatically add them as
+return types for non-matching variants,
+
+</details>
 
 ## Examples
 Used penum to force every variant to be a tuple with one field that must
@@ -211,20 +241,12 @@ impl AsInner<i32> for Foo {
 }
 ```
 
-It's identical to this:
+- It's identical to this:
 ```rust
 #[penum(impl Ce: ^Special, Be: ^AsInner<i32>)]
-enum Foo {
-    V1(Al),
-    V2(i32, Be),
-    V3(Ce),
-    V4 { name: String, age: Be },
-}
 ```
 
-
-
-#### Details
+#### More details
 
 - **Impls** — can be seen as a shorthand for *a concrete type that
   implements this trait*, and are primarily used as a substitute for
@@ -241,101 +263,3 @@ enum Foo {
   types. Like placeholders, they are a way to express that we don't care
   about the rest of the parameters in a pattern. The look something like
   this`(T, U, ..) | {num: T, ..}`.
-
-#### New syntax
-```rust
-    #[penum(impl ^AsRef<str> for String)] 
-
-    #[penum(impl String: ^AsRef<str> )]
-
-    #[penum(for String: ^AsRef<str>, i32: ^AsRef<i32> )]
-
-    #[penum(where String: ^AsRef<str> )]
-
-```
-
-```console
-#[penum( impl Type: ^Trait )]
-         ^^^^ ^^^^^^^^^^^^
-         |    |
-         |    Predicate bound.
-         |
-         Shorthand for `_ where` expression.
-
-
-#[penum( impl ^Trait for Type )]
-         ^^^^ ^^^^^^     ^^^^
-         |    |          |
-         |    Predicate bound.
-         |
-         Shorthand for `_ where` expression.
-```
-
-
-|   Traits   |   Supported   |
-| ---------- | ------------- |
-|`Any`| supported |
-|`Borrow`| supported |
-|`BorrowMut`| supported |
-|`Eq`| supported |
-|`AsMut`| supported |
-|`AsRef`| supported |
-|`From`| supported |
-|`Into`| supported |
-|`TryFrom`| supported |
-|`TryInto`| supported |
-|`Default`| supported |
-|`Binary`| supported |
-|`Debug`| supported |
-|`Display`| supported |
-|`LowerExp`| supported |
-|`LowerHex`| supported |
-|`Octal`| supported |
-|`Pointer`| supported |
-|`UpperExp`| supported |
-|`UpperHex`| supported |
-|`Future`| supported |
-|`IntoFuture`| supported |
-|`FromIterator`| supported |
-|`FusedIterator`| supported |
-|`IntoIterator`| supported |
-|`Product`| supported |
-|`Sum`| supported |
-|`Copy`| supported |
-|`Sized`| supported |
-|`ToSocketAddrs`| supported |
-|`Add`| supported |
-|`AddAssign`| supported |
-|`BitAnd`| supported |
-|`BitAndAssign`| supported |
-|`BitOr`| supported |
-|`BitOrAssign`| supported |
-|`BitXor`| supported |
-|`BitXorAssign`| supported |
-|`Deref`| supported |
-|`DerefMut`| supported |
-|`Div`| supported |
-|`DivAssign`| supported |
-|`Drop`| supported |
-|`Fn`| supported |
-|`FnMut`| supported |
-|`FnOnce`| supported |
-|`Index`| supported |
-|`IndexMut`| supported |
-|`Mul`| supported |
-|`MulAssign`| supported |
-|`MultiMethod`| supported |
-|`Neg`| supported |
-|`Not`| supported |
-|`Rem`| supported |
-|`RemAssign`| supported |
-|`Shl`| supported |
-|`ShlAssign`| supported |
-|`Shr`| supported |
-|`ShrAssign`| supported |
-|`Sub`| supported |
-|`SubAssign`| supported |
-|`Termination`| supported |
-|`SliceIndex`| supported |
-|`FromStr`| supported |
-|`ToString`| supported |
