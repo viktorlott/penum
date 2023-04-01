@@ -59,7 +59,7 @@ $ cargo add penum
 ```
 ## Overview 
 A `Penum` expression can look like this:
-```text
+```console
                       Dispatch symbol
                       |
 #[penum( (T) where T: ^Trait )]
