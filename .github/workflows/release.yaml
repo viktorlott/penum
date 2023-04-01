@@ -10,39 +10,51 @@ on:
       - "completed"
 
 jobs:
-  get-tag:
-    name: "Get Tag From Package Version"
-    runs-on: "ubuntu-latest"
+  changelog:
+    name: Generate changelog
+    runs-on: ubuntu-latest
     outputs:
-      pkg-version: ${{ steps.pkg-version.outputs.PKG_VERSION }} 
+      release_body: ${{ steps.git-cliff.outputs.content }}
     steps:
-      - name: "Check out the repo"
+      - name: Checkout
         uses: actions/checkout@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-      - name: "Get tag"
-        id: "pkg-version"
-        shell: "bash"
-        run: |
-          echo PKG_VERSION=$(awk -F ' = ' '$1 ~ /version/ { gsub(/["]/, "", $2); printf("%s",$2) }' Cargo.toml) >> $GITHUB_OUTPUT
+      - name: Generate a changelog
+        uses: orhun/git-cliff-action@v2
+        id: git-cliff
+        with:
+          config: cliff.toml
+          args: -vv --latest --strip header
+        env:
+          OUTPUT: CHANGES.md
 
-  create-release:
-    name: "Create release"
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    needs: "get-tag"
-    runs-on: "ubuntu-latest"
-    steps:
-      - name: "Check out the repo"
-        uses: actions/checkout@v3
+      # use release body in the same job
+      - name: Upload the binary releases
+        uses: svenstaro/upload-release-action@v2
+        with:
+          file: binary_release.zip
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref }}
+          body: ${{ steps.git-cliff.outputs.content }}
+
+  # create-release:
+  #   name: "Create release"
+  #   if: ${{ github.event.workflow_run.conclusion == 'success' }}
+  #   needs: "get-tag"
+  #   runs-on: "ubuntu-latest"
+  #   steps:
+  #     - name: "Check out the repo"
+  #       uses: actions/checkout@v3
       
-      - name: "Create release"
-        uses: "taiki-e/create-gh-release-action@v1"
-        with:
-          branch: "main"
-          ref: refs/tags/v${{ needs.get-tag.outputs.pkg-version }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          title: $version
+  #     - name: "Create release"
+  #       uses: "taiki-e/create-gh-release-action@v1"
+  #       with:
+  #         branch: "main"
+  #         ref: refs/tags/v${{ needs.get-tag.outputs.pkg-version }}
+  #         token: ${{ secrets.GITHUB_TOKEN }}
+  #         title: $version
 
   # upload-assets:
   #   name: "Upload assets to Github releases"
