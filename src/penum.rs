@@ -26,7 +26,7 @@ use crate::factory::PenumExpr;
 use crate::factory::Subject;
 use crate::factory::WherePredicate;
 
-use crate::dispatch::VariantSignature;
+use crate::dispatch::VariantSig;
 use crate::error::Diagnostic;
 
 use crate::utils::create_unique_ident;
@@ -159,24 +159,25 @@ impl Penum<Disassembled> {
 
                 // 2. Check if we match in `structure`. (We are naively
                 // always expecting to never have infixed variadics)
-                for (_index_param, (pat_parameter, item_field)) in matched_pair.zip().enumerate() {
-                    let item_ty_unique = UniqueHashId(item_field.ty.clone());
-
-                    // FIXME: We are only expecting one dispatch per
-                    // generic now, so CHANGE THIS WHEN POSSIBLE:
-                    // where T: ^Trait, T: ^Mate -> only ^Trait will
-                    // be found. :( Fixed? where T: ^Trait + ^Mate
-                    // -> should be just turn this into a poly map
-                    // instead?
-                    let variant_sig = VariantSignature::new(
-                        enum_ident,
-                        variant_ident,
-                        item_field,
-                        max_fields_len,
-                    );
+                for (index, (pat_parameter, item_field)) in matched_pair.zip().enumerate() {
+                    let item_ty_unique = UniqueHashId::new(&item_field.ty);
 
                     if let PatFieldKind::Infer = pat_parameter {
+                        // println!("infer");
                         if let Some(blueprints) = maybe_blueprint_map.as_mut() {
+                            // FIXME: We are only expecting one dispatch per
+                            // generic now, so CHANGE THIS WHEN POSSIBLE:
+                            // where T: ^Trait, T: ^Mate -> only ^Trait will
+                            // be found. :( Fixed? where T: ^Trait + ^Mate
+                            // -> should be just turn this into a poly map
+                            // instead?
+                            let variant_sig = VariantSig::new(
+                                enum_ident,
+                                variant_ident,
+                                item_field,
+                                index,
+                                max_fields_len,
+                            );
                             blueprints.find_and_attach(&item_ty_unique, &variant_sig);
                         }
                         self.types
@@ -222,7 +223,15 @@ impl Penum<Disassembled> {
                     // NOTE: This string only contains the Ident, so any
                     // generic parameters will be discarded
                     let pat_ty_string = pat_field.ty.get_string();
-                    let pat_ty_unique = UniqueHashId(pat_field.ty.clone());
+                    let pat_ty_unique = UniqueHashId::new(&pat_field.ty);
+
+                    let variant_sig = VariantSig::new(
+                        enum_ident,
+                        variant_ident,
+                        item_field,
+                        index,
+                        max_fields_len,
+                    );
 
                     // Check if it's a generic or concrete type
                     // - We only accept `_|[A-Z][A-Z0-9]*` as generics.
@@ -230,20 +239,34 @@ impl Penum<Disassembled> {
                         && pat_ty_string.to_uppercase().eq(&pat_ty_string);
 
                     if is_generic {
-                        // 3. Dispachable list
-                        if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                            for ty_unique in [&pat_ty_unique, &item_ty_unique] {
-                                blueprints.find_and_attach(ty_unique, &variant_sig);
-                            }
-                        };
+                        // If the variant field is equal to the pattern field, then the variant
+                        // field must be generic, therefore we should introduce a <gen> expr for
+                        // the enum IF there doesn't exist one.
+                        if item_ty_unique.eq(&pat_ty_unique) {
+                            // Continuing means that we wont add T bounds to polymap
+                            if let Some(blueprints) = maybe_blueprint_map.as_mut() {
+                                blueprints.find_and_attach(&pat_ty_unique, &variant_sig);
+                            };
 
-                        for ty_unique in [pat_ty_unique, item_ty_unique.clone()] {
-                            self.types.polymap_insert(ty_unique, item_ty_unique.clone());
+                            self.types
+                                .polymap_insert(pat_ty_unique, item_ty_unique.clone());
+                        } else {
+                            // 3. Dispachable list
+                            if let Some(blueprints) = maybe_blueprint_map.as_mut() {
+                                for ty_unique in [&pat_ty_unique, &item_ty_unique] {
+                                    blueprints.find_and_attach(ty_unique, &variant_sig);
+                                }
+                            };
+
+                            for ty_unique in [pat_ty_unique, item_ty_unique.clone()] {
+                                self.types.polymap_insert(ty_unique, item_ty_unique.clone());
+                            }
                         }
 
                         // FIXME: This will only work for nullary type
                         // constructors.
                     } else if pat_field.ty.is_placeholder() {
+                        // Make sure we map the concrete type instead of the pat_ty
                         if let Some(blueprints) = maybe_blueprint_map.as_mut() {
                             blueprints.find_and_attach(&item_ty_unique, &variant_sig);
                         }
@@ -273,6 +296,8 @@ impl Penum<Disassembled> {
                 let (impl_generics, ty_generics, where_clause) =
                     &self.subject.generics.split_for_impl();
 
+                // let wc = &self.expr.clause;
+
                 blueprints.for_each_blueprint(|blueprint| {
                     let trait_path = blueprint.get_sanatized_impl_path();
                     let assoc_methods = blueprint.get_associated_methods();
@@ -283,6 +308,12 @@ impl Penum<Disassembled> {
                             .collect::<TokenStream2>()
                     });
 
+                    // let where_clause = if where_clause.is_none() {
+                    //     self.expr.clause.as_ref().map(ToTokens::to_token_stream)
+                    // } else {
+                    //     where_clause.map(ToTokens::to_token_stream)
+                    // };
+
                     let implementation: ItemImpl = parse_quote!(
                         impl #impl_generics #trait_path for #enum_ident #ty_generics #where_clause {
                             #assoc_types
@@ -290,6 +321,7 @@ impl Penum<Disassembled> {
                             #(#assoc_methods)*
                         }
                     );
+
                     self.impls.push(implementation);
                 });
             }

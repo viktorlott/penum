@@ -1,6 +1,6 @@
 pub use self::blueprint::Blueprint;
 pub use self::blueprint::Blueprints;
-pub use self::sig::VariantSignature;
+pub use self::sig::VariantSig;
 
 mod blueprint;
 mod ret;

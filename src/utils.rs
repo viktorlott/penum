@@ -58,7 +58,11 @@ impl<K: Hash, V: Hash> Deref for PolymorphicMap<UniqueHashId<K>, UniqueHashId<V>
     }
 }
 
-impl<T: Hash> UniqueHashId<T> {
+impl<T: Hash + Clone> UniqueHashId<T> {
+    pub fn new(value: &T) -> Self {
+        Self(value.clone())
+    }
+
     pub fn get_unique_ident(&self) -> Ident
     where
         T: Spanned + ToTokens,

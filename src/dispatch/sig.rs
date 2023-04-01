@@ -18,7 +18,7 @@ use syn::TraitItemMethod;
 use quote::ToTokens;
 
 #[derive(Debug)]
-pub struct VariantSignature<'info> {
+pub struct VariantSig<'info> {
     enum_ident: &'info Ident,
     variant_ident: &'info Ident,
     caller: Ident,
@@ -27,6 +27,7 @@ pub struct VariantSignature<'info> {
 
 /// For each <Dispatchable> -> <{ position, ident, fields }> Used to
 /// know the position of a field.
+#[derive(Debug)]
 pub enum Position<'a> {
     /// The index of the field being dispatched
     Index(usize, &'a Field),
@@ -68,14 +69,15 @@ impl<'a> Position<'a> {
     }
 }
 
-impl<'info> VariantSignature<'info> {
+impl<'info> VariantSig<'info> {
     pub fn new(
         enum_ident: &'info Ident,
         variant_ident: &'info Ident,
         field: &Field,
+        index: usize,
         max_length: usize,
     ) -> Self {
-        let position = Position::from_field(field, max_length);
+        let position = Position::from_field(field, index);
         let caller = position.get_caller();
         let fields = position.format_fields_pattern(max_length);
 
@@ -122,7 +124,7 @@ impl<'a> Position<'a> {
 
         match self {
             Position::Index(index, field) => {
-                for _ in 1..*index {
+                for _ in 1..*index + 1 {
                     punc.push_value(Param::Placeholder);
                     punc.push_punct(Comma(field.span()));
                 }

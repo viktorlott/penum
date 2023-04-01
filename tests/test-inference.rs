@@ -38,7 +38,14 @@ enum Foo {
     V1(Al),
     V2(i32, Be),
     V3(Ce),
-    V4 { name: String, age: Be },
+    V4 {
+        name: String,
+        age: Be,
+        country: String,
+    },
+    V5(Be, i32),
+    V6(i32, i32, Be, i32),
+    // V7(i32, Be, Be, i32), // TODO: Fix unreachable pattern
 }
 
 fn main() {}

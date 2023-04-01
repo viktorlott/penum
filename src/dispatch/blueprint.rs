@@ -31,7 +31,7 @@ use super::ret::return_default_ret_type;
 use super::ret::return_panic;
 use super::T_SHM;
 
-use super::sig::VariantSignature;
+use super::sig::VariantSig;
 use super::standard::StandardTrait;
 use super::standard::TraitSchematic;
 
@@ -200,7 +200,7 @@ impl<'bound> Blueprint<'bound> {
 
     /// Fill our blueprint with dispatchable variant arms that we later
     /// use to contruct an impl statement.
-    pub fn attach(&mut self, variant_sig: &VariantSignature) {
+    pub fn attach(&mut self, variant_sig: &VariantSig) {
         let mut arms: BTreeMap<Ident, Vec<Arm>> = Default::default();
 
         for item in self.schematic.items.iter() {
@@ -375,7 +375,7 @@ impl<'bound> Blueprints<'bound> {
         self.0.iter().for_each(|m| m.1.iter().for_each(&mut f))
     }
 
-    pub fn find_and_attach(&mut self, id: &UniqueHashId<Type>, variant_sig: &VariantSignature) {
+    pub fn find_and_attach(&mut self, id: &UniqueHashId<Type>, variant_sig: &VariantSig) {
         if let Some(bp_list) = self.get_mut(id) {
             for blueprint in bp_list.iter_mut() {
                 blueprint.attach(variant_sig)
