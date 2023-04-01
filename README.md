@@ -173,9 +173,9 @@ enum Guard {
 }
 ```
 
-If you don't care about the actual pattern matching, then you could use `_` to automatically 
-infer every shape and field. Combine this with concrete dispatch types, and you got yourself a 
-auto dispatcher.
+If you don't care about the actual pattern matching, then you could use
+`_` to automatically infer every shape and field. Combine this with
+concrete dispatch types, and you got yourself a auto dispatcher.
 ```rust
 #[penum( _ where Ce: ^Special, Be: ^AsInner<i32> )]
 enum Foo {

@@ -8,10 +8,12 @@ use quote::format_ident;
 use quote::ToTokens;
 
 use syn::punctuated::Punctuated;
+use syn::token::Add;
 use syn::token::Comma;
 use syn::Ident;
 use syn::ItemImpl;
 use syn::TraitBound;
+use syn::TypeParamBound;
 
 use syn::parse_quote;
 use syn::spanned::Spanned;
@@ -37,6 +39,8 @@ use crate::utils::UniqueHashId;
 pub struct Disassembled;
 pub struct Assembled;
 
+type PolyMap = PolymorphicMap<UniqueHashId<Type>, UniqueHashId<Type>>;
+
 /// Top level container type for Penum.
 ///
 /// It contains everything we need to construct our dispatcher and
@@ -45,12 +49,10 @@ pub struct Penum<State = Disassembled> {
     expr: PenumExpr,
     subject: Subject,
     error: Diagnostic,
-    types: PolymorphicMap<UniqueHashId<Type>, UniqueHashId<Type>>,
+    types: PolyMap,
     impls: Vec<ItemImpl>,
     _marker: PhantomData<State>,
 }
-
-
 
 impl Penum<Disassembled> {
     pub fn from(expr: PenumExpr, subject: Subject) -> Self {
@@ -103,35 +105,35 @@ impl Penum<Disassembled> {
                 // FIXME: This only affects concrete types.. but
                 //  `.compare(..)` should return a list of matches
                 //  instead of just the first match it finds.
-                // 
+                //
                 //  # Uni-matcher -> Multi-matcher
                 //  Currently, we can end up returning a pattern that matches in shape, but not
                 //  in structure, even though another pattern could satisfy our variant. In a case
                 //  like the one below, we have a "catch all" variadic.
-                // 
+                //
                 //  e.g. (i32, ..) | (..) => V1(String, i32), V2(String, String)
                 //                              ^^^^^^           ^^^^^^
                 //                              |                |
                 //                              `Found 'String' but expected 'i32'`
-                // 
+                //
                 //  Because the first pattern fragment contains a concrete type, it should be possible
                 //  mark the error as temporary and then check for other pattern matches. Note, the first
                 //  error should always be the default one.
-                // 
+                //
                 //  Given our pattern above, `(..)` should be a fallback pattern.
-                // 
+                //
                 //  Should we allow concrete types with trait bound at argument position?
                 //  e.g.
                 //    (i32: Trait,  ..) | (..)
                 //    (i32: ^Trait, ..) | (..)
-                // 
+                //
                 //  For future reference! This should help with dispach inference.
-                // 
+                //
                 //  # "catch-all" syntax
                 //  Given the example above, if we were to play with it a little, we could end up with
                 //  something like this:
                 //  `(i32, ..) | _` that translate to `(i32, ..) | (..) | {..}`
-                // 
+                //
                 //  Maybe it's something that would be worth having considering something like this:
                 //  `_ where String: ^AsRef<str>`
 
@@ -197,33 +199,12 @@ impl Penum<Disassembled> {
                     if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
                         let bounds = &ty_impl_trait.bounds;
 
-                        let mut impl_string = String::new();
-
-                        for bound in bounds.iter() {
-                            match bound {
-                                syn::TypeParamBound::Trait(trait_bound) => {
-                                    if let syn::TraitBoundModifier::None = trait_bound.modifier {
-                                        impl_string
-                                            .push_str(&trait_bound.get_unique_trait_bound_id())
-                                    } else {
-                                        self.error.extend(
-                                            bound.span(),
-                                            maybe_bounds_not_permitted(trait_bound),
-                                        );
-                                    }
-                                }
-                                syn::TypeParamBound::Lifetime(_) => {
-                                    self.error.extend_spanned(bound, lifetime_not_permitted());
-                                }
-                            }
-                        }
-
                         // No point in continuing if we have errors or
                         // unique_impl_id is empty
-                        if self.error.has_error() || impl_string.is_empty() {
+                        let Some(impl_string) = create_impl_string(bounds, &mut self.error) else {
                             // Add debug logs
                             continue;
-                        }
+                        };
 
                         // TODO: Add support for impl dispatch
                         let unique_impl_id =
@@ -258,14 +239,12 @@ impl Penum<Disassembled> {
                             }
                         };
 
-                        // First we check if pty (T) exists in
-                        // polymorphicmap. If it exists, insert new
-                        // concrete type.
-                        self.types
-                            .polymap_insert(pat_ty_unique.clone(), item_ty_unique.clone());
-
-                        self.types
-                            .polymap_insert(item_ty_unique.clone(), item_ty_unique.clone());
+                        for ty_unique in [pat_ty_unique, item_ty_unique.clone()] {
+                            // First we check if pty (T) exists in
+                            // polymorphicmap. If it exists, insert new
+                            // concrete type.
+                            self.types.polymap_insert(ty_unique, item_ty_unique.clone());
+                        }
 
                         // FIXME: This will only work for nullary type
                         // constructors.
@@ -439,5 +418,33 @@ impl TypeUtils for Type {
 impl TraitBoundUtils for TraitBound {
     fn get_unique_trait_bound_id(&self) -> String {
         UniqueHashId(self).get_unique_string()
+    }
+}
+
+fn create_impl_string<'a>(
+    bounds: &'a Punctuated<TypeParamBound, Add>,
+    error: &'a mut Diagnostic,
+) -> Option<String> {
+    let mut impl_string = String::new();
+
+    for bound in bounds.iter() {
+        match bound {
+            syn::TypeParamBound::Trait(trait_bound) => {
+                if let syn::TraitBoundModifier::None = trait_bound.modifier {
+                    impl_string.push_str(&trait_bound.get_unique_trait_bound_id())
+                } else {
+                    error.extend(bound.span(), maybe_bounds_not_permitted(trait_bound));
+                }
+            }
+            syn::TypeParamBound::Lifetime(_) => {
+                error.extend_spanned(bound, lifetime_not_permitted());
+            }
+        }
+    }
+
+    if error.has_error() || impl_string.is_empty() {
+        None
+    } else {
+        Some(impl_string)
     }
 }
