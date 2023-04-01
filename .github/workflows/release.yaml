@@ -35,8 +35,9 @@ jobs:
       - name: Upload the binary releases
         uses: svenstaro/upload-release-action@v2
         with:
-          file: binary_release.zip
+          file: penum-logo.png
           repo_token: ${{ secrets.GITHUB_TOKEN }}
+          release_name: Release $tag
           tag: ${{ github.ref }}
           body: ${{ steps.git-cliff.outputs.content }}
 
