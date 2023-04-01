@@ -1,8 +1,7 @@
-use quote::{ToTokens, TokenStreamExt};
 use syn::{
     braced, parenthesized,
     parse::{Parse, ParseStream},
-    parse_quote, token, Field, Ident, LitInt, LitStr, Token, Type,
+    token, Field, Ident, LitInt, LitStr, Token, Type,
 };
 
 use crate::factory::{TraitBound, WhereClause};
@@ -27,12 +26,12 @@ impl Parse for ImplExpr {
     }
 }
 
-impl ToTokens for ImplExpr {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+impl ImplExpr {
+    fn into_clause(self) -> WhereClause {
         let Self {
             trait_bound, ty, ..
         } = self;
-        quote::quote!(where #ty: #trait_bound).to_tokens(tokens);
+        syn::parse_quote!(where #ty: #trait_bound)
     }
 }
 
@@ -47,15 +46,13 @@ impl Parse for PenumExpr {
         if input.peek(token::Where) || input.peek(token::For) || input.peek(token::Impl) {
             if ImplExpr::parse(&input.fork()).is_ok() {
                 let impl_expr: ImplExpr = input.parse()?;
-                let impl_expr = impl_expr.to_token_stream();
-                let clause: WhereClause = parse_quote!(#impl_expr);
 
                 return Ok(Self {
                     pattern: vec![PatFrag {
                         ident: None,
                         group: PatComposite::Inferred,
                     }],
-                    clause: Some(clause),
+                    clause: Some(impl_expr.into_clause()),
                 });
             }
 
