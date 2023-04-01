@@ -46,3 +46,4 @@ pre-release-replacements = [
     { file = "README.md", search = "penum = \"[a-z0-9\\.-]+\"", replace = "penum = \"{{version}}\"" },
 ]
 pre-release-hook = ["./hook.sh"]
+pre-release-commit-message = "chore: Release v{{version}}"
