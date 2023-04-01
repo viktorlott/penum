@@ -36,8 +36,8 @@ jobs:
         with:
           file: penum-logo.png
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          release_name: Release ${{ github.ref }}
           tag: ${{ github.ref }}
+          release_name: Penum - ${{ github.ref }}
           body: ${{ steps.git-cliff.outputs.content }}
 
   # create-release:
