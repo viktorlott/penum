@@ -72,6 +72,8 @@ impl Penum<Disassembled> {
         let enum_ident = &self.subject.ident;
         let error = &mut self.error;
 
+        println!("{}", self.expr.pattern_to_string());
+
         if !variants.is_empty() {
             // The point is that as we check for equality, we also do
             // impl assertions by extending the `subjects` where clause.
@@ -321,7 +323,7 @@ impl Penum<Disassembled> {
                             #(#assoc_methods)*
                         }
                     );
-
+                    println!("{}", implementation.to_token_stream());
                     self.impls.push(implementation);
                 });
             }
@@ -359,6 +361,7 @@ impl Penum<Assembled> {
                 let impl_items = self.impls;
                 let output = quote::quote!(#enum_item #(#impl_items)*);
 
+                println!("{}", output);
                 output
             })
             .into()

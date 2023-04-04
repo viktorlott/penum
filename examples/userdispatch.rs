@@ -81,7 +81,7 @@ impl AsRef<str> for Inner {
     }
 }
 
-#[penum(impl AsRef<str> for {String,Inner})]
+#[penum(_ where String: ^AsRef<str> )]
 enum Store {
     V0(Inner),
 
