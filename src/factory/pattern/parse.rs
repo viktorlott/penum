@@ -1,7 +1,8 @@
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::TokenStream;
 use syn::{
     braced, parenthesized,
     parse::{Parse, ParseStream},
+    spanned::Spanned,
     token, Field, Ident, LitInt, LitStr, Token, Type,
 };
 
@@ -20,16 +21,7 @@ impl Parse for ImplExpr {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(Self {
             impl_token: input.parse()?,
-            trait_bound: {
-                let mut tb: TraitBound = input.parse()?;
-
-                // Always dispatch for impl expressions
-                if tb.dispatch.is_none() {
-                    tb.dispatch = Some(token::Caret(Span::call_site()));
-                }
-
-                tb
-            },
+            trait_bound: input.parse()?,
             for_token: input.parse()?,
             tys: {
                 if input.peek(token::Brace) {
@@ -69,7 +61,8 @@ impl ImplExpr {
         let mut bounds = TokenStream::new();
 
         for (index, ty) in tys.iter().enumerate() {
-            bounds.extend(quote::quote!(#ty: #trait_bound));
+            // Always dispatch for impl expressions
+            bounds.extend(quote::quote!(#ty: ^#trait_bound));
 
             if index != tys.len() - 1 {
                 bounds.extend(quote::quote!(,));
@@ -90,14 +83,12 @@ impl Parse for PenumExpr {
 
         if input.peek(token::Where) || input.peek(token::For) || input.peek(token::Impl) {
             if ImplExpr::parse(&input.fork()).is_ok() {
-                let impl_expr: ImplExpr = input.parse()?;
-
                 return Ok(Self {
                     pattern: vec![PatFrag {
                         ident: None,
                         group: PatComposite::Inferred,
                     }],
-                    clause: Some(impl_expr.into_clause()),
+                    clause: Some(input.parse::<ImplExpr>()?.into_clause()),
                 });
             }
 

@@ -9,6 +9,7 @@ use quote::ToTokens;
 use crate::{
     dispatch::{Blueprint, Blueprints},
     error::Diagnostic,
+    penum::Stringify,
     utils::UniqueHashId,
 };
 
@@ -177,11 +178,23 @@ impl PenumExpr {
                         }
                     }
                 }
+
                 if blueprints.is_empty() {
                     return None;
                 }
 
+                // If pred_ty is concrete, use trait bound as a key
+
+                // let pat_ty_string = pred_ty.bounded_ty.get_string();
+                // let is_generic = pat_ty_string.to_uppercase().eq(&pat_ty_string);
+
                 let ty = UniqueHashId(pred_ty.bounded_ty.clone());
+                // if is_generic {
+                //     UniqueHashId(pred_ty.bounded_ty.clone())
+                // } else {
+                //     // blueprints
+                //     let concrete = pred_ty.bounds.last();
+                // };
 
                 if let Some(entry) = polymap.get_mut(&ty) {
                     entry.append(&mut blueprints);
