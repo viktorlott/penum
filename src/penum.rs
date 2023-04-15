@@ -349,6 +349,20 @@ impl Penum<Disassembled> {
 }
 
 impl Penum<Assembled> {
+    pub fn get_tokenstream(mut self) -> TokenStream2 {
+        self.attach_assertions();
+        if self.error.has_error() {
+            self.error.map(Error::to_compile_error).unwrap()
+        } else {
+            let enum_item = self.subject;
+            let impl_items = self.impls;
+
+            let output = quote::quote!(#enum_item #(#impl_items)*);
+
+            output
+        }
+    }
+
     pub fn unwrap_or_error(mut self) -> TokenStream {
         self.attach_assertions();
 

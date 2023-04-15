@@ -98,3 +98,45 @@ pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
     // shape pattern. for each variant => pattern.find(variant)
     penum.unwrap_or_error()
 }
+
+#[cfg(test)]
+mod tests {
+    use proc_macro2::TokenStream;
+    use syn::parse_quote;
+
+    use crate::{
+        factory::{PenumExpr, Subject},
+        penum::Penum,
+    };
+
+    fn penum(attr: TokenStream, input: TokenStream, expect: String) {
+        let pattern: PenumExpr = parse_quote!( #attr );
+        let input: Subject = parse_quote!( #input );
+
+        let penum = Penum::from(pattern, input)
+            .assemble()
+            .get_tokenstream()
+            .to_string();
+
+        assert_eq!(penum, expect);
+    }
+
+    #[test]
+    fn test_expression() {
+        let attr = quote::quote!(
+            (T) where T: Trait
+        );
+
+        let input = quote::quote!(
+            enum Enum {
+                V1(i32),
+                V2(usize),
+                V3(String),
+            }
+        );
+
+        let expect = "enum Enum where usize : Trait , String : Trait , i32 : Trait { V1 (i32) , V2 (usize) , V3 (String) , }".to_string();
+
+        penum(attr, input, expect)
+    }
+}
