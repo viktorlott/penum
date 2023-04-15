@@ -308,23 +308,21 @@ impl Penum<Disassembled> {
                     let trait_path = blueprint.get_sanatized_impl_path();
                     let assoc_methods = blueprint.get_associated_methods();
 
-                    if !assoc_methods.is_empty() {
-                        let assoc_types = blueprint.get_mapped_bindings().map(|bind| {
-                            bind.iter()
-                                .map(|b| b.to_token_stream())
-                                .collect::<TokenStream2>()
-                        });
+                    let assoc_types = blueprint.get_mapped_bindings().map(|bind| {
+                        bind.iter()
+                            .map(|b| b.to_token_stream())
+                            .collect::<TokenStream2>()
+                    });
 
-                        let implementation: ItemImpl = parse_quote!(
-                            impl #impl_generics #trait_path for #enum_ident #ty_generics #where_clause {
-                                #assoc_types
+                    let implementation: ItemImpl = parse_quote!(
+                        impl #impl_generics #trait_path for #enum_ident #ty_generics #where_clause {
+                            #assoc_types
 
-                                #(#assoc_methods)*
-                            }
-                        );
+                            #(#assoc_methods)*
+                        }
+                    );
 
-                        self.impls.push(implementation);
-                    }
+                    self.impls.push(implementation);
                 });
             }
 
