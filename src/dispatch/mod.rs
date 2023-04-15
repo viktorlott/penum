@@ -1,5 +1,5 @@
 pub use self::blueprint::Blueprint;
-pub use self::blueprint::Blueprints;
+pub use self::blueprint::BlueprintsMap;
 pub use self::sig::VariantSig;
 
 mod blueprint;

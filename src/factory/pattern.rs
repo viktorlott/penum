@@ -7,13 +7,12 @@ use syn::{
 use quote::ToTokens;
 
 use crate::{
-    dispatch::{Blueprint, Blueprints},
+    dispatch::{Blueprint, BlueprintsMap},
     error::Diagnostic,
-    penum::Stringify,
     utils::UniqueHashId,
 };
 
-use super::{Comparable, PredicateType, WhereClause, WherePredicate};
+use super::{ComparablePats, PredicateType, WhereClause, WherePredicate};
 
 mod boilerplate;
 mod parse;
@@ -144,11 +143,8 @@ impl PenumExpr {
             .unwrap()
     }
 
-    pub fn get_comparable_patterns(&self) -> Vec<Comparable<PatComposite>> {
-        self.pattern
-            .iter()
-            .map(|pattern| Comparable::from(&pattern.group))
-            .collect()
+    pub fn get_comparable_patterns(&self) -> ComparablePats {
+        self.into()
     }
 
     pub fn has_predicates(&self) -> bool {
@@ -160,21 +156,38 @@ impl PenumExpr {
     }
 
     /// This should probably be refactored...
-    pub fn get_blueprints(&self, error: &mut Diagnostic) -> Option<Blueprints> {
+    ///
+    /// NOTE: This totally works when we are using Generics with patterns. But if we use
+    /// concrete types with trait bounds it breaks.
+    ///
+    /// We somehow need to know that if a penum expression contains two or more concrete types with
+    /// the same dispatched trait bound we should interprete them as the same. If we do not do this
+    /// we create x implementations for the same trait.
+    ///
+    /// I feel like the blueprints map key should be based on trait bound instead of type.
+    ///
+    /// SOLUTION: We could keep this as it is, and instead fold our blueprints map so that types with the
+    /// same trait bounds are combined.
+    pub fn get_blueprints(&self, error: &mut Diagnostic) -> Option<BlueprintsMap> {
         let Some(clause) = self.clause.as_ref() else {
             return None
         };
 
-        let mut polymap: Blueprints = Default::default();
+        let mut polymap = BlueprintsMap::default();
 
         for pred in clause.predicates.iter() {
             if let WherePredicate::Type(pred_ty) = pred {
-                let mut blueprints: Vec<Blueprint> = Default::default();
-                for tr in pred_ty.bounds.iter() {
-                    if let Some(dtr) = tr.get_dispatchable_trait_bound() {
-                        match Blueprint::try_from(dtr) {
+                let mut blueprints = Vec::<Blueprint>::default();
+
+                for param_bound in pred_ty.bounds.iter() {
+                    // Only get trait bound with `^` caret. e.g Type: ^Trait
+                    if let Some(trait_bound) = param_bound.get_dispatchable_trait_bound() {
+                        // This will try to first check if the trait exists in our
+                        // std trait store, and if it's not found, we'll check our
+                        // SHM map.
+                        match Blueprint::try_from(trait_bound) {
                             Ok(blueprint) => blueprints.push(blueprint),
-                            Err(err) => error.extend(dtr.span(), err),
+                            Err(err) => error.extend(trait_bound.span(), err),
                         }
                     }
                 }

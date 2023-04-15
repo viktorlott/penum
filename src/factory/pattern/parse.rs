@@ -2,7 +2,6 @@ use proc_macro2::TokenStream;
 use syn::{
     braced, parenthesized,
     parse::{Parse, ParseStream},
-    spanned::Spanned,
     token, Field, Ident, LitInt, LitStr, Token, Type,
 };
 
@@ -23,30 +22,31 @@ impl Parse for ImplExpr {
             impl_token: input.parse()?,
             trait_bound: input.parse()?,
             for_token: input.parse()?,
-            tys: {
-                if input.peek(token::Brace) {
-                    let content;
-                    let _ = braced!(content in input);
-                    let mut tys = vec![];
+            /// FIXME: There's probably a better way of doing this.
+            /// Check Puncuated.
+            tys: if input.peek(token::Brace) {
+                let content;
+                let _ = braced!(content in input);
+                let mut tys = vec![];
 
-                    loop {
-                        if content.is_empty() {
-                            break;
-                        }
-
-                        let ty: Type = content.parse()?;
-                        tys.push(ty);
-
-                        if !content.peek(token::Comma) {
-                            break;
-                        } else {
-                            let _: token::Comma = content.parse()?;
-                        }
+                loop {
+                    if content.is_empty() {
+                        break;
                     }
-                    tys
-                } else {
-                    vec![input.parse()?]
+
+                    let ty: Type = content.parse()?;
+                    tys.push(ty);
+
+                    if content.peek(token::Comma) {
+                        let _: token::Comma = content.parse()?;
+                    } else {
+                        break;
+                    }
                 }
+
+                tys
+            } else {
+                vec![input.parse()?]
             },
         })
     }
