@@ -1,3 +1,5 @@
+#![allow(clippy::all)]
+#![allow(named_arguments_used_positionally)]
 use ::rustfmt::{format_input, Input};
 use regex::Regex;
 use scraper::{Html, Selector};

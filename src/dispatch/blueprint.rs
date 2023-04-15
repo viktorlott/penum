@@ -64,10 +64,13 @@ pub struct Blueprint<'bound> {
     /// `method_name -> [Arm]`
     pub methods: BTreeMap<Ident, Vec<Arm>>,
 }
-
+// FIXME: Should be by Trait bound instead of by Type?
+// This will stop working when `impl Trait for {A, B}` because
+// they are interpreted as two different impls.
+// `_ where i32: ^Trait, usize: ^Trait`
 #[repr(transparent)]
 #[derive(Default, Hash, Debug)]
-pub struct Blueprints<'bound>(BTreeMap<UniqueHashId<Type>, Vec<Blueprint<'bound>>>);
+pub struct BlueprintsMap<'bound>(BTreeMap<UniqueHashId<Type>, Vec<Blueprint<'bound>>>);
 
 /// Only use this for modifying methods trait generics. Should probably
 /// use visit_mut more often..
@@ -370,21 +373,54 @@ fn trait_not_found(bound: &TraitBound) -> String {
     format!("`{}` cannot be found. Make sure the trait is tagged with the `#[penum]` attribute, and is invoked before your enum.", bound.get_ident())
 }
 
-impl<'bound> Blueprints<'bound> {
+impl<'bound> BlueprintsMap<'bound> {
+    /// This flattens values in the map.
+    /// ty: [blueprint] -> [[blueprint]] -> [blueprint]
+    ///
+    /// NOTE: Some of these blueprints might be duplicates, meaning that we implement two or more
+    /// times for the same trait. So what we have to do here is deduplicate the blueprints by
+    /// mapping over the trait bounds instead of the concrete types.
+    ///
+    /// FIXME: Change so that we can map on trait bounds instead of just concrete types. Each
+    /// implementation needs to be unique, i.e. there can only be one trait implementation per type.
+    /// Note, Trait<U> and Trait<T> are considered different, so we should support generic traits.
     pub fn for_each_blueprint(&self, mut f: impl FnMut(&Blueprint)) {
-        self.0.iter().for_each(|m| m.1.iter().for_each(&mut f))
+        // TODO: We could probably just use a HashSet instead and implement Hash for Blueprint->bound.
+        let mut deduplicates: BTreeMap<UniqueHashId<Type>, Blueprint<'bound>> = Default::default();
+
+        for item in self.0.iter() {
+            for blueprint in item.1.iter() {
+                let bound = blueprint.bound;
+                let id: Type = parse_quote!(#bound);
+                let id_unique = UniqueHashId::new(&id);
+
+                // FIXME: TEMP, should fix this copy mess
+                if let Some(unique_entry) = deduplicates.get_mut(&id_unique) {
+                    unique_entry
+                        .methods
+                        .extend(blueprint.methods.clone().into_iter());
+                } else {
+                    deduplicates.insert(id_unique, blueprint.clone());
+                }
+            }
+        }
+
+        deduplicates.iter().for_each(|m| f(m.1))
     }
 
-    pub fn find_and_attach(&mut self, id: &UniqueHashId<Type>, variant_sig: &VariantSig) {
+    pub fn find_and_attach(&mut self, id: &UniqueHashId<Type>, variant_sig: &VariantSig) -> bool {
         if let Some(bp_list) = self.get_mut(id) {
             for blueprint in bp_list.iter_mut() {
                 blueprint.attach(variant_sig)
             }
+            true
+        } else {
+            false
         }
     }
 }
 
-impl<'bound> Deref for Blueprints<'bound> {
+impl<'bound> Deref for BlueprintsMap<'bound> {
     type Target = BTreeMap<UniqueHashId<Type>, Vec<Blueprint<'bound>>>;
 
     fn deref(&self) -> &Self::Target {
@@ -392,7 +428,7 @@ impl<'bound> Deref for Blueprints<'bound> {
     }
 }
 
-impl<'bound> DerefMut for Blueprints<'bound> {
+impl<'bound> DerefMut for BlueprintsMap<'bound> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0.borrow_mut()
     }

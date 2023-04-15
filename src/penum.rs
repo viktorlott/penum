@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::marker::PhantomData;
 
 use proc_macro::TokenStream;
@@ -20,7 +19,6 @@ use syn::spanned::Spanned;
 use syn::Error;
 use syn::Type;
 
-use crate::factory::ComparablePats;
 use crate::factory::PatFieldKind;
 use crate::factory::PenumExpr;
 use crate::factory::Subject;
@@ -66,36 +64,37 @@ impl Penum<Disassembled> {
         }
     }
 
-    /// I am using [field / parameter / argument] interchangeably
     pub fn assemble(mut self) -> Penum<Assembled> {
+        // NOTE: I might be using [field / parameter / argument] interchangeably.
+        // - Field usually refers to a named variants
+        // - Argument usually refers to unnamed variants
+        // - Parameter usually refers to penum patterns (unnamed/named).
         let variants = &self.subject.get_variants();
         let enum_ident = &self.subject.ident;
         let error = &mut self.error;
 
-        println!("{}", self.expr.pattern_to_string());
-
         if !variants.is_empty() {
+            // Expecting failure like `variant doesn't match shape`,
+            // hence pre-calling.
+            let pattern_fmt = self.expr.pattern_to_string();
+
             // The point is that as we check for equality, we also do
             // impl assertions by extending the `subjects` where clause.
             // This is something that we might want to change in the
             // future and instead use `spanned_quote` or some other
             // bound assertion.
-            let mut predicates: Punctuated<WherePredicate, Comma> = Default::default();
+            let mut predicates = Punctuated::<WherePredicate, Comma>::default();
 
             // Prepare our patterns by converting them into
             // `Comparables`. This is just a wrapper type that contains
             // commonly used props.
-            let comparable_pats: ComparablePats = self.expr.borrow().into();
+            let comparable_pats = self.expr.get_comparable_patterns();
 
             // We pre-check our clause because we might be needing this
             // during the dispatch step. Should add
             // `has_dispatchable_member` maybe? let has_clause =
             // self.expr.has_clause(); Turn into iterator instead?
             let mut maybe_blueprint_map = self.expr.get_blueprints(error);
-
-            // Expecting failure like `variant doesn't match shape`,
-            // hence pre-calling.
-            let pattern_fmt = self.expr.pattern_to_string();
 
             // For each variant:
             // 1. Validate its shape by comparing discriminant and
@@ -165,7 +164,6 @@ impl Penum<Disassembled> {
                     let item_ty_unique = UniqueHashId::new(&item_field.ty);
 
                     if let PatFieldKind::Infer = pat_parameter {
-                        // println!("infer");
                         if let Some(blueprints) = maybe_blueprint_map.as_mut() {
                             // FIXME: We are only expecting one dispatch per
                             // generic now, so CHANGE THIS WHEN POSSIBLE:
@@ -180,6 +178,11 @@ impl Penum<Disassembled> {
                                 index,
                                 max_fields_len,
                             );
+
+                            // FIXME: I think this is a problem when we infer types
+                            // and then also dispatch traits for different types.
+                            // What I mean is that `impl Trait for {i32, u32}` would
+                            // cause us to create two implementations instead of just one.
                             blueprints.find_and_attach(&item_ty_unique, &variant_sig);
                         }
                         self.types
@@ -197,17 +200,18 @@ impl Penum<Disassembled> {
                     // TODO: Refactor into TypeId instead.
                     let item_ty_string = item_field.ty.get_string();
 
+                    // FIXME: Remove this, or refactor it. Remember that there's
+                    // tests that needs to be removed/changed.
                     if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
                         let bounds = &ty_impl_trait.bounds;
 
                         let Some(impl_string) = create_impl_string(bounds, &mut self.error) else {
                             // No point of continuing if we have errors or
                             // unique_impl_id is empty
-                            // Add debug logs
+                            // FIXME: Add debug logs
                             continue;
                         };
 
-                        // TODO: Add support for impl dispatch
                         let unique_impl_id =
                             create_unique_ident(&impl_string, variant_ident, ty_impl_trait.span());
 
@@ -274,6 +278,8 @@ impl Penum<Disassembled> {
                         }
                         self.types
                             .polymap_insert(item_ty_unique.clone(), item_ty_unique);
+
+                        // is concrete type equal to concrete type
                     } else if item_ty_unique.eq(&pat_ty_unique) {
                         // 3. Dispachable list
                         if let Some(blueprints) = maybe_blueprint_map.as_mut() {
@@ -298,33 +304,27 @@ impl Penum<Disassembled> {
                 let (impl_generics, ty_generics, where_clause) =
                     &self.subject.generics.split_for_impl();
 
-                // let wc = &self.expr.clause;
-
                 blueprints.for_each_blueprint(|blueprint| {
                     let trait_path = blueprint.get_sanatized_impl_path();
                     let assoc_methods = blueprint.get_associated_methods();
 
-                    let assoc_types = blueprint.get_mapped_bindings().map(|bind| {
-                        bind.iter()
-                            .map(|b| b.to_token_stream())
-                            .collect::<TokenStream2>()
-                    });
+                    if !assoc_methods.is_empty() {
+                        let assoc_types = blueprint.get_mapped_bindings().map(|bind| {
+                            bind.iter()
+                                .map(|b| b.to_token_stream())
+                                .collect::<TokenStream2>()
+                        });
 
-                    // let where_clause = if where_clause.is_none() {
-                    //     self.expr.clause.as_ref().map(ToTokens::to_token_stream)
-                    // } else {
-                    //     where_clause.map(ToTokens::to_token_stream)
-                    // };
+                        let implementation: ItemImpl = parse_quote!(
+                            impl #impl_generics #trait_path for #enum_ident #ty_generics #where_clause {
+                                #assoc_types
 
-                    let implementation: ItemImpl = parse_quote!(
-                        impl #impl_generics #trait_path for #enum_ident #ty_generics #where_clause {
-                            #assoc_types
+                                #(#assoc_methods)*
+                            }
+                        );
 
-                            #(#assoc_methods)*
-                        }
-                    );
-                    println!("{}", implementation.to_token_stream());
-                    self.impls.push(implementation);
+                        self.impls.push(implementation);
+                    }
                 });
             }
 
@@ -361,7 +361,7 @@ impl Penum<Assembled> {
                 let impl_items = self.impls;
                 let output = quote::quote!(#enum_item #(#impl_items)*);
 
-                println!("{}", output);
+                // println!("{}", output);
                 output
             })
             .into()
@@ -385,7 +385,7 @@ impl Penum<Assembled> {
                                     .into_iter()
                                     .map(|mut token| {
                                         // NOTE: This is the only way we can
-                                        // change the span of a `bound`..
+                                        // impose a new span for a `bound`..
                                         // FIXES: tests/ui/placeholder_with_bound.rs
                                         // FIXES: tests/ui/trait-bound-not-satisfied.rs
                                         token.set_span(ty.span());
