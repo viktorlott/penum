@@ -11,7 +11,7 @@ mod to_tokens;
 
 pub type Variants = Punctuated<Variant, Comma>;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Subject {
     pub attrs: Vec<Attribute>,
     pub vis: Visibility,
