@@ -6,7 +6,6 @@ use syn::ItemTrait;
 
 use factory::PenumExpr;
 use factory::Subject;
-
 use penum::Penum;
 
 use crate::dispatch::T_SHM;
@@ -79,6 +78,8 @@ mod utils;
 /// ```
 #[proc_macro_attribute]
 pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
+    // TODO: Make it bi-directional, meaning it's also possible to register enums and then do
+    // the implementations when we tag a trait. (That is actually better).
     if attr.is_empty() {
         let output = input.clone();
         let item_trait = parse_macro_input!(input as ItemTrait);
@@ -86,17 +87,17 @@ pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
         // If we cannot find the trait the user wants to dispatch, we need to store it.
         T_SHM.insert(item_trait.ident.get_string(), item_trait.get_string());
 
-        return output;
+        output
+    } else {
+        let pattern = parse_macro_input!(attr as PenumExpr);
+        let input = parse_macro_input!(input as Subject);
+
+        let penum = Penum::from(pattern, input).assemble();
+
+        // Loop through enum definition and match each variant with each
+        // shape pattern. for each variant => pattern.find(variant)
+        penum.unwrap_or_error()
     }
-
-    let pattern = parse_macro_input!(attr as PenumExpr);
-    let input = parse_macro_input!(input as Subject);
-
-    let penum = Penum::from(pattern, input).assemble();
-
-    // Loop through enum definition and match each variant with each
-    // shape pattern. for each variant => pattern.find(variant)
-    penum.unwrap_or_error()
 }
 
 #[cfg(test)]
@@ -109,7 +110,7 @@ mod tests {
         penum::Penum,
     };
 
-    fn penum(attr: TokenStream, input: TokenStream, expect: String) {
+    fn penum_assertion(attr: TokenStream, input: TokenStream, expect: TokenStream) {
         let pattern: PenumExpr = parse_quote!( #attr );
         let input: Subject = parse_quote!( #input );
 
@@ -118,25 +119,90 @@ mod tests {
             .get_tokenstream()
             .to_string();
 
-        assert_eq!(penum, expect);
+        assert_eq!(penum, expect.to_string());
     }
 
     #[test]
+    #[rustfmt::skip]
     fn test_expression() {
         let attr = quote::quote!(
             (T) where T: Trait
         );
-
+        
         let input = quote::quote!(
             enum Enum {
                 V1(i32),
                 V2(usize),
-                V3(String),
+                V3(String)
             }
         );
 
-        let expect = "enum Enum where usize : Trait , String : Trait , i32 : Trait { V1 (i32) , V2 (usize) , V3 (String) , }".to_string();
+        let expect = quote::quote!(
+            enum Enum
+            where
+                usize: Trait,
+                String: Trait,
+                i32: Trait
+            {
+                V1(i32),
+                V2(usize),
+                V3(String)
+            }
+        );
 
-        penum(attr, input, expect)
+        penum_assertion(attr, input, expect)
     }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_std_dispatch() {
+        let attr = quote::quote!(
+            (T) where T: ^AsRef<str>
+        );
+
+        let input = quote::quote!(
+            enum Enum {
+                V1(String),
+            }
+        );
+
+        let expect = quote::quote!(
+            enum Enum where String: AsRef<str> {
+                V1(String),
+            }
+
+            impl AsRef<str> for Enum {
+                fn as_ref(&self) -> &str {
+                    match self {
+                        Enum::V1(val) => val.as_ref(),
+                        _ => ""
+                    }
+                }
+            }
+        );
+
+        penum_assertion(attr, input, expect)
+    }
+
+    // TODO: Decide how variadics should be interpreted when we have concrete type bounds.
+    // Make sure to update `tests/test-concrete-bound.rs` if this later gets supported.
+    //
+    // #[test]
+    // fn test_variadic_with_concrete_type_bound() {
+    //     let attr = quote::quote!(
+    //         (..) where String: AsRef<str>
+    //     );
+
+    //     let input = quote::quote!(
+    //         enum Foo {
+    //             Bar(f32, i32),
+    //             Ber(String, Vec<String>),
+    //             Bur(),
+    //         }
+    //     );
+
+    //     let expect = "enum Foo where String : AsRef < str > { Bar (f32 , i32) , Ber (String , Vec < String >) , Bur () , }".to_string();
+
+    //     penum_assertion(attr, input, expect)
+    // }
 }
