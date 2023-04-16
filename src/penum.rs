@@ -193,6 +193,8 @@ impl Penum<Disassembled> {
 
                     // If we cannot desctructure a pattern field, then
                     // it must be variadic. This might change later
+                    //
+                    // NOTE: This causes certain bugs (see tests/test-concrete-bound.rs)
                     let Some(pat_field) = pat_parameter.get_field() else {
                         break;
                     };
@@ -349,6 +351,8 @@ impl Penum<Disassembled> {
 }
 
 impl Penum<Assembled> {
+    // NOTE: This is only used for unit tests
+    #[allow(dead_code)]
     pub fn get_tokenstream(mut self) -> TokenStream2 {
         self.attach_assertions();
         if self.error.has_error() {
@@ -373,13 +377,12 @@ impl Penum<Assembled> {
                 let impl_items = self.impls;
                 let output = quote::quote!(#enum_item #(#impl_items)*);
 
-                // println!("{}", output);
                 output
             })
             .into()
     }
 
-    fn attach_assertions(&mut self) {
+    pub(crate) fn attach_assertions(&mut self) {
         if let Some(where_cl) = self.expr.clause.as_ref() {
             for (_, predicate) in where_cl.predicates.iter().enumerate() {
                 match predicate {
