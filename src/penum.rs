@@ -382,7 +382,7 @@ impl Penum<Assembled> {
             .into()
     }
 
-    pub(crate) fn attach_assertions(&mut self) {
+    pub(self) fn attach_assertions(&mut self) {
         if let Some(where_cl) = self.expr.clause.as_ref() {
             for (_, predicate) in where_cl.predicates.iter().enumerate() {
                 match predicate {
@@ -508,3 +508,184 @@ macro_rules! eor {
 }
 
 pub(self) use eor;
+
+#[cfg(test)]
+mod tests {
+    use proc_macro2::TokenStream;
+    use syn::{parse_quote, ItemTrait};
+
+    use crate::{
+        dispatch::T_SHM,
+        factory::{PenumExpr, Subject},
+        penum::{Penum, Stringify},
+    };
+
+    fn penum_assertion(attr: TokenStream, input: TokenStream, expect: TokenStream) {
+        let pattern: PenumExpr = parse_quote!( #attr );
+        let input: Subject = parse_quote!( #input );
+
+        let penum = Penum::from(pattern, input)
+            .assemble()
+            .get_tokenstream()
+            .to_string();
+
+        assert_eq!(penum, expect.to_string());
+    }
+
+    fn register_trait(input: TokenStream) {
+        let item_trait: ItemTrait = parse_quote!(#input);
+        // If we cannot find the trait the user wants to dispatch, we need to store it.
+        T_SHM.insert(item_trait.ident.get_string(), item_trait.get_string());
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn simple_expression() {
+        let attr = quote::quote!(
+            (T) where T: Trait
+        );
+        
+        let input = quote::quote!(
+            enum Enum {
+                V1(i32),
+                V2(usize),
+                V3(String)
+            }
+        );
+
+        let expect = quote::quote!(
+            enum Enum
+            where
+                usize: Trait,
+                String: Trait,
+                i32: Trait
+            {
+                V1(i32),
+                V2(usize),
+                V3(String)
+            }
+        );
+
+        penum_assertion(attr, input, expect);
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn dispatch_std_trait() {
+        let attr = quote::quote!(
+            (T) where T: ^AsRef<str>
+        );
+
+        let input = quote::quote!(
+            enum Enum {
+                V1(String),
+            }
+        );
+
+        let expect = quote::quote!(
+            enum Enum where String: AsRef<str> {
+                V1(String),
+            }
+
+            impl AsRef<str> for Enum {
+                fn as_ref(&self) -> &str {
+                    match self {
+                        Enum::V1(val) => val.as_ref(),
+                        _ => ""
+                    }
+                }
+            }
+        );
+
+        penum_assertion(attr, input, expect);
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn dispatch_custom_trait() {
+        let blueprint = quote::quote!(
+            trait Abc {
+                type Input;
+                fn get(&self) -> &Self::Input;
+            }
+        );
+
+        let attr = quote::quote!(
+            (T) where T: ^Abc<Input = str>
+        );
+
+        let input = quote::quote!(
+            enum Enum {
+                V1(String),
+                V2(String)
+            }
+        );
+
+        let expect = quote::quote!(
+            enum Enum where String: Abc<Input = str> {
+                V1(String),
+                V2(String)
+            }
+
+            impl Abc<Input = str> for Enum {
+                type Input = str;
+                fn get(&self) -> &Self::Input {
+                    match self {
+                        Enum::V1(val) => val.get(),
+                        Enum::V2(val) => val.get(),
+                        _ => panic!("Missing arm")
+                    }
+                }
+            }
+        );
+
+        register_trait(blueprint);
+        penum_assertion(attr, input, expect);
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn dispatch_custom_trait_with_impl_expression() {
+        let blueprint = quote::quote!(
+            trait Abc {
+                type Input;
+                fn get(&self) -> &Self::Input;
+            }
+        );
+
+        let attr = quote::quote!(
+            impl Abc<Input = str> for String
+        );
+
+        let input = quote::quote!(
+            enum Enum {
+                V1(String, i32),
+                V2(i32, String)
+            }
+        );
+
+        let expect = quote::quote!(
+            enum Enum where String: Abc<Input = str> {
+                V1(String, i32),
+                V2(i32, String)
+            }
+
+            impl Abc<Input = str> for Enum {
+                type Input = str;
+                fn get(&self) -> &Self::Input {
+                    match self {
+                        Enum::V1(val, ..) => val.get(),
+                        Enum::V2(_, val) => val.get(),
+                        _ => panic!("Missing arm")
+                    }
+                }
+            }
+        );
+
+        register_trait(blueprint);
+        penum_assertion(attr, input, expect);
+    }
+
+    // TODO: Decide how variadics should be interpreted when we have concrete type bounds.
+    // Make sure to update `tests/test-concrete-bound.rs` if this later gets supported.
+}
