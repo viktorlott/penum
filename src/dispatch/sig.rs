@@ -74,10 +74,10 @@ impl<'info> VariantSig<'info> {
         enum_ident: &'info Ident,
         variant_ident: &'info Ident,
         field: &Field,
-        index: usize,
+        field_index: usize,
         max_length: usize,
     ) -> Self {
-        let position = Position::from_field(field, index);
+        let position = Position::from_field(field, field_index);
         let caller = position.get_caller();
         let fields = position.format_fields_pattern(max_length);
 

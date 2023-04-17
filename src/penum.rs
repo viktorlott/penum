@@ -12,6 +12,7 @@ use syn::token::Comma;
 use syn::Ident;
 use syn::ItemImpl;
 use syn::TraitBound;
+use syn::TypeImplTrait;
 use syn::TypeParamBound;
 
 use syn::parse_quote;
@@ -19,7 +20,6 @@ use syn::spanned::Spanned;
 use syn::Error;
 use syn::Type;
 
-use crate::factory::PatFieldKind;
 use crate::factory::PenumExpr;
 use crate::factory::Subject;
 use crate::factory::WherePredicate;
@@ -149,40 +149,29 @@ impl Penum<Disassembled> {
                     continue
                 };
 
-                // No support for empty unit iter, yet... NOTE: Make
-                // sure to handle composite::unit iterator before
-                // removing this
+                // No support for empty unit iter, yet...
+                // NOTE: Make sure to handle composite::unit iterator before removing this
                 if matched_pair.as_composite().is_unit() {
                     continue;
                 }
 
-                let max_fields_len = comp_item.inner.len();
+                let arity = comp_item.inner.len();
 
                 // 2. Check if we match in `structure`. (We are naively
                 // always expecting to never have infixed variadics)
-                for (index, (pat_parameter, item_field)) in matched_pair.zip().enumerate() {
-                    let item_ty_unique = UniqueHashId::new(&item_field.ty);
+                for (field_index, (param_pattern, field_item)) in matched_pair.zip().enumerate() {
+                    let item_ty_unique = field_item.ty.get_unique_id();
 
-                    if let PatFieldKind::Infer = pat_parameter {
+                    if param_pattern.is_infer() {
                         if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                            // FIXME: We are only expecting one dispatch per
-                            // generic now, so CHANGE THIS WHEN POSSIBLE:
-                            // where T: ^Trait, T: ^Mate -> only ^Trait will
-                            // be found. :( Fixed? where T: ^Trait + ^Mate
-                            // -> should be just turn this into a poly map
-                            // instead?
                             let variant_sig = VariantSig::new(
                                 enum_ident,
                                 variant_ident,
-                                item_field,
-                                index,
-                                max_fields_len,
+                                field_item,
+                                field_index,
+                                arity,
                             );
 
-                            // FIXME: I think this is a problem when we infer types
-                            // and then also dispatch traits for different types.
-                            // What I mean is that `impl Trait for {i32, u32}` would
-                            // cause us to create two implementations instead of just one.
                             blueprints.find_and_attach(&item_ty_unique, &variant_sig);
                         }
                         self.types
@@ -191,26 +180,23 @@ impl Penum<Disassembled> {
                         continue;
                     }
 
-                    // If we cannot desctructure a pattern field, then
-                    // it must be variadic. This might change later
+                    // If we cannot desctructure a pattern field, then it must be variadic.
                     //
                     // NOTE: This causes certain bugs (see tests/test-concrete-bound.rs)
-                    let Some(pat_field) = pat_parameter.get_field() else {
+                    let Some(pat_field) = param_pattern.get_field() else {
                         break;
                     };
 
-                    // TODO: Refactor into TypeId instead.
-                    let item_ty_string = item_field.ty.get_string();
-
                     // FIXME: Remove this, or refactor it. Remember that there's
                     // tests that needs to be removed/changed.
-                    if let Type::ImplTrait(ref ty_impl_trait) = pat_field.ty {
+                    if let Some(ty_impl_trait) = pat_field.ty.get_type_impl_trait() {
                         let bounds = &ty_impl_trait.bounds;
 
                         let Some(impl_string) = create_impl_string(bounds, &mut self.error) else {
+                            // FIXME: Add debug logs.
+                            //
                             // No point of continuing if we have errors or
                             // unique_impl_id is empty
-                            // FIXME: Add debug logs
                             continue;
                         };
 
@@ -219,84 +205,82 @@ impl Penum<Disassembled> {
 
                         predicates.push(parse_quote!(#unique_impl_id: #bounds));
 
-                        // First we check if pty (T) exists in
-                        // polymorphicmap. If it exists, insert new
-                        // concrete type.
+                        // First we check if pty (T) exists in polymorphicmap.
+                        // If it exists, insert new concrete type.
                         self.types
                             .polymap_insert(unique_impl_id.clone().into(), item_ty_unique);
+                    } else {
+                        // NOTE: This string only contains the Ident, so any generic parameters will
+                        // be discarded.
+                        let pat_ty_string = pat_field.ty.get_string();
+                        let pat_ty_unique = pat_field.ty.get_unique_id();
 
-                        continue;
-                    }
+                        let variant_sig = VariantSig::new(
+                            enum_ident,
+                            variant_ident,
+                            field_item,
+                            field_index,
+                            arity,
+                        );
 
-                    // NOTE: This string only contains the Ident, so any
-                    // generic parameters will be discarded
-                    let pat_ty_string = pat_field.ty.get_string();
-                    let pat_ty_unique = UniqueHashId::new(&pat_field.ty);
+                        // Check if it's a generic or concrete type
+                        // - We only accept `_|[A-Z][A-Z0-9]*` as generics.
+                        //
+                        // NOTE: `is_generic` is redundant given that we have already created the
+                        // pat_ty_string.
+                        if pat_field.ty.is_generic() {
+                            // If the variant field is equal to the pattern field, then the variant
+                            // field must be generic, therefore we should introduce a <gen> expr for
+                            // the enum IF there doesn't exist one.
+                            if item_ty_unique.eq(&pat_ty_unique) {
+                                // Continuing means that we wont add T bounds to polymap
+                                if let Some(blueprints) = maybe_blueprint_map.as_mut() {
+                                    blueprints.find_and_attach(&pat_ty_unique, &variant_sig);
+                                };
 
-                    let variant_sig = VariantSig::new(
-                        enum_ident,
-                        variant_ident,
-                        item_field,
-                        index,
-                        max_fields_len,
-                    );
+                                self.types
+                                    .polymap_insert(pat_ty_unique, item_ty_unique.clone());
+                            } else {
+                                if let Some(blueprints) = maybe_blueprint_map.as_mut() {
+                                    for ty_unique in [&pat_ty_unique, &item_ty_unique] {
+                                        blueprints.find_and_attach(ty_unique, &variant_sig);
+                                    }
+                                };
 
-                    // Check if it's a generic or concrete type
-                    // - We only accept `_|[A-Z][A-Z0-9]*` as generics.
-                    let is_generic = !pat_field.ty.is_placeholder()
-                        && pat_ty_string.to_uppercase().eq(&pat_ty_string);
+                                for ty_unique in [pat_ty_unique, item_ty_unique.clone()] {
+                                    self.types.polymap_insert(ty_unique, item_ty_unique.clone());
+                                }
+                            }
 
-                    if is_generic {
-                        // If the variant field is equal to the pattern field, then the variant
-                        // field must be generic, therefore we should introduce a <gen> expr for
-                        // the enum IF there doesn't exist one.
-                        if item_ty_unique.eq(&pat_ty_unique) {
-                            // Continuing means that we wont add T bounds to polymap
+                            // FIXME: This will only work for nullary type constructors.
+                        } else if pat_field.ty.is_placeholder() {
+                            // Make sure we map the concrete type instead of the pat_ty
                             if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                                blueprints.find_and_attach(&pat_ty_unique, &variant_sig);
-                            };
-
+                                blueprints.find_and_attach(&item_ty_unique, &variant_sig);
+                            }
                             self.types
-                                .polymap_insert(pat_ty_unique, item_ty_unique.clone());
-                        } else {
+                                .polymap_insert(item_ty_unique.clone(), item_ty_unique);
+
+                            // is concrete type equal to concrete type
+                        } else if item_ty_unique.eq(&pat_ty_unique) {
                             // 3. Dispachable list
                             if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                                for ty_unique in [&pat_ty_unique, &item_ty_unique] {
-                                    blueprints.find_and_attach(ty_unique, &variant_sig);
-                                }
-                            };
-
-                            for ty_unique in [pat_ty_unique, item_ty_unique.clone()] {
-                                self.types.polymap_insert(ty_unique, item_ty_unique.clone());
+                                blueprints.find_and_attach(&item_ty_unique, &variant_sig);
                             }
-                        }
 
-                        // FIXME: This will only work for nullary type
-                        // constructors.
-                    } else if pat_field.ty.is_placeholder() {
-                        // Make sure we map the concrete type instead of the pat_ty
-                        if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                            blueprints.find_and_attach(&item_ty_unique, &variant_sig);
-                        }
-                        self.types
-                            .polymap_insert(item_ty_unique.clone(), item_ty_unique);
+                            self.types.polymap_insert(
+                                pat_ty_unique, // PATTERN
+                                item_ty_unique,
+                            );
+                        } else {
+                            // TODO: Refactor into TypeId instead.
+                            let item_ty_string = field_item.ty.get_string();
 
-                        // is concrete type equal to concrete type
-                    } else if item_ty_unique.eq(&pat_ty_unique) {
-                        // 3. Dispachable list
-                        if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                            blueprints.find_and_attach(&item_ty_unique, &variant_sig);
+                            self.error.extend_spanned(
+                                &field_item.ty,
+                                format!("Found `{item_ty_string}` but expected `{pat_ty_string}`."),
+                            );
                         }
-
-                        self.types.polymap_insert(
-                            pat_ty_unique, // PATTERN
-                            item_ty_unique,
-                        );
-                    } else {
-                        self.error.extend_spanned(
-                            &item_field.ty,
-                            format!("Found `{item_ty_string}` but expected `{pat_ty_string}`."),
-                        );
                     }
                 }
             }
@@ -387,9 +371,9 @@ impl Penum<Assembled> {
             for (_, predicate) in where_cl.predicates.iter().enumerate() {
                 match predicate {
                     WherePredicate::Type(pred) => {
-                        if let Some(pty_set) =
-                            self.types.get(&UniqueHashId(pred.bounded_ty.clone()))
-                        {
+                        let id = pred.bounded_ty.get_unique_id();
+
+                        if let Some(pty_set) = self.types.get(&id) {
                             for (_, ty_id) in pty_set.iter().enumerate() {
                                 let ty = &**ty_id;
 
@@ -436,14 +420,30 @@ pub trait TraitBoundUtils {
 }
 
 pub trait TypeUtils {
+    fn is_generic(&self) -> bool;
     fn is_placeholder(&self) -> bool;
     fn some_generic(&self) -> Option<String>;
     fn get_generic_ident(&self) -> Ident;
+    fn get_unique_id(&self) -> UniqueHashId<Type>;
+    fn get_type_impl_trait(&self) -> Option<&TypeImplTrait>;
 }
 
 impl<T> Stringify for T where T: ToTokens {}
 
 impl TypeUtils for Type {
+    fn get_type_impl_trait(&self) -> Option<&TypeImplTrait> {
+        if let Type::ImplTrait(ref ty_impl_trait) = self {
+            Some(ty_impl_trait)
+        } else {
+            None
+        }
+    }
+
+    fn is_generic(&self) -> bool {
+        let pat_ty_string = self.to_token_stream().to_string();
+        !self.is_placeholder() && pat_ty_string.to_uppercase().eq(&pat_ty_string)
+    }
+
     fn is_placeholder(&self) -> bool {
         matches!(self, Type::Infer(_))
     }
@@ -460,6 +460,10 @@ impl TypeUtils for Type {
     /// Only use this when you are sure it's a generic type.
     fn get_generic_ident(&self) -> Ident {
         format_ident!("{}", self.get_string(), span = self.span())
+    }
+
+    fn get_unique_id(&self) -> UniqueHashId<Type> {
+        UniqueHashId::new(self)
     }
 }
 

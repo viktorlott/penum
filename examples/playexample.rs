@@ -63,6 +63,13 @@ enum Mine4 {
     V2(i32),
     V3(usize, i32),
 }
+
+#[penum( (T) | (T, U) where T: ^Trait, T: ^Trait2)]
+enum Mine5 {
+    V1(i32),
+    V2(i32),
+    V3(i32, i32),
+}
 // impl Trait2 for Mine4 {
 //     fn go2(&self) -> String {
 //         match self {

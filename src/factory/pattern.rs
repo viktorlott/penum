@@ -257,6 +257,11 @@ impl PatFieldKind {
         matches!(self, PatFieldKind::Range(_))
     }
 
+    /// Used to quickly check if PatFieldKind is `Infer`
+    pub fn is_infer(&self) -> bool {
+        matches!(self, PatFieldKind::Infer)
+    }
+
     /// This is basically the same as `is_field` but instead of
     /// returning a boolean, we return an Option<&Field> if self is a
     /// field.
