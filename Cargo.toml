@@ -25,7 +25,7 @@ doctest = false
 cargo-release = "0.24.8"
 proc-macro2 = "1.0.51"
 quote = "1.0.23"
-syn = { version = "1.0.109", features = [
+syn = { version = "2.0.15", features = [
     "full",
     "visit",
     "visit-mut",
