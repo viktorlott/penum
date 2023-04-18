@@ -6,9 +6,11 @@ use std::ops::DerefMut;
 
 use proc_macro2::Ident;
 
+use proc_macro2::Span;
 use syn::parse_quote;
 use syn::parse_str;
 use syn::punctuated::Punctuated;
+use syn::token;
 use syn::visit_mut::visit_angle_bracketed_generic_arguments_mut;
 use syn::visit_mut::visit_type_mut;
 use syn::visit_mut::VisitMut;
@@ -57,10 +59,22 @@ use super::standard::TraitSchematic;
 /// ```
 #[derive(Clone, Hash, Debug)]
 pub struct Blueprint<'bound> {
+    /// Concrete type
+    /// The first blueprint will take precedence over the rest (of the same type)
+    ///
+    /// NOTE: This lets us infer associated types when there's
+    /// no trait binding found. e.g.
+    /// ```rust
+    /// type Target = <T as Trait>::Target;
+    /// ```
+    pub ty: Option<Box<Type>>,
+
     /// Trait bound
     pub bound: &'bound TraitBound,
+
     /// Trait definition
     pub schematic: TraitSchematic,
+
     /// `method_name -> [Arm]`
     pub methods: BTreeMap<Ident, Vec<Arm>>,
 }
@@ -180,25 +194,72 @@ impl<'bound> Blueprint<'bound> {
     /// //   get_bound_bindings() <> get_schematic_types()
     /// ```
     pub fn get_mapped_bindings(&self) -> Option<Vec<TraitItemType>> {
-        let Some(bindings) = self.get_bound_bindings() else {
-            return None
-        };
-
         let mut types = self.get_schematic_types().collect::<Vec<_>>();
 
-        for binding in bindings {
-            let Some(matc) = types.iter_mut()
-                .find_map(|assoc| assoc.ident.eq(&binding.ident)
-                .then_some(assoc)) else {
-                panic!("Missing associated trait bindings")
-            };
+        // OMG FIX THIS SHIT
 
-            if matc.default.is_none() {
-                matc.default = Some((binding.eq_token, binding.ty.clone()));
+        // IMPORTANT: This can still return with Some(bindings) where
+        // bindings is an empty iterator.
+        //
+        // Assume that if get_bound_bindings = None, then we have a trait bound
+        // without any generic arguments.
+        let Some(bindings) = self.get_bound_bindings() else {
+            // FIXME: Should we fallback on `<T as Trait>::Type`
+            for matc in types.iter_mut() {
+                if matc.default.is_none() && self.ty.is_some() {
+                    let ty = &self.ty;
+                    let bound = &self.bound;
+
+                    let ident = &matc.ident;
+                    let generics = &matc.generics;
+
+                    matc.default = Some((token::Eq(Span::call_site()), parse_quote!(
+                        <#ty as #bound>::#ident #generics
+                    )));
+                }
             }
-        }
 
-        Some(types)
+            return Some(types)
+        };
+
+        let mut bindings = bindings.peekable();
+        let is_none = bindings.peek().is_none();
+
+        if is_none {
+            let mut types = self.get_schematic_types().collect::<Vec<_>>();
+            for matc in types.iter_mut() {
+                if matc.default.is_none() && self.ty.is_some() {
+                    let ty = &self.ty;
+                    let bound = &self.bound;
+
+                    let ident = &matc.ident;
+                    let generics = &matc.generics;
+
+                    matc.default = Some((
+                        token::Eq(Span::call_site()),
+                        parse_quote!(
+                            <#ty as #bound>::#ident #generics
+                        ),
+                    ));
+                }
+            }
+
+            Some(types)
+        } else {
+            for binding in bindings {
+                let Some(matc) = types.iter_mut()
+                    .find_map(|assoc| assoc.ident.eq(&binding.ident)
+                    .then_some(assoc)) else {
+                    panic!("Missing associated trait bindings")
+                };
+
+                if matc.default.is_none() {
+                    matc.default = Some((binding.eq_token, binding.ty.clone()));
+                }
+            }
+
+            Some(types)
+        }
     }
 
     /// Fill our blueprint with dispatchable variant arms that we later
@@ -249,15 +310,23 @@ impl<'bound> Blueprint<'bound> {
     /// //                        Binding
     /// ``
     fn get_bound_bindings(&self) -> Option<impl Iterator<Item = &Binding>> {
-        let path_segment = self.bound.path.segments.last().unwrap();
-        match path_segment.arguments.borrow() {
-            syn::PathArguments::AngleBracketed(angle) => {
-                Some(angle.args.iter().filter_map(|arg| match arg {
-                    syn::GenericArgument::Binding(binding) => Some(binding),
-                    _ => None,
-                }))
+        if let Type::Path(path) = &self.bound.ty {
+            let path_segment = path.path.segments.last().unwrap();
+            match path_segment.arguments.borrow() {
+                syn::PathArguments::AngleBracketed(angle) => {
+                    // NOTE: This can cause us to still return as if we have bindings even though we
+                    // might be returning an empty iterator.
+                    //
+                    // This can trick the user into thinking that the method description is true.
+                    Some(angle.args.iter().filter_map(|arg| match arg {
+                        syn::GenericArgument::Binding(binding) => Some(binding),
+                        _ => None,
+                    }))
+                }
+                _ => None,
             }
-            _ => None,
+        } else {
+            None
         }
     }
 
@@ -272,15 +341,19 @@ impl<'bound> Blueprint<'bound> {
     /// //                        Concrete type
     /// ```
     fn get_bound_generics(&self) -> Option<impl Iterator<Item = &Type>> {
-        let path_segment = self.bound.path.segments.last().unwrap();
-        match path_segment.arguments.borrow() {
-            syn::PathArguments::AngleBracketed(angle) => {
-                Some(angle.args.iter().filter_map(|arg| match arg {
-                    syn::GenericArgument::Type(ty) => Some(ty),
-                    _ => None,
-                }))
+        if let Type::Path(path) = &self.bound.ty {
+            let path_segment = path.path.segments.last().unwrap();
+            match path_segment.arguments.borrow() {
+                syn::PathArguments::AngleBracketed(angle) => {
+                    Some(angle.args.iter().filter_map(|arg| match arg {
+                        syn::GenericArgument::Type(ty) => Some(ty),
+                        _ => None,
+                    }))
+                }
+                _ => None,
             }
-            _ => None,
+        } else {
+            None
         }
     }
 
@@ -345,10 +418,12 @@ impl<'bound> Blueprint<'bound> {
 impl<'bound> TryFrom<&'bound TraitBound> for Blueprint<'bound> {
     type Error = syn::Error;
     fn try_from(bound: &'bound TraitBound) -> Result<Self, Self::Error> {
+        // FIXME: get_ident can be "OMG"
         let b_name = bound.get_ident();
 
-        if let Ok(schematic) = StandardTrait::try_from(b_name) {
+        if let Ok(schematic) = StandardTrait::try_from(&b_name) {
             Ok(Self {
+                ty: None,
                 schematic: schematic.into(),
                 bound,
                 methods: Default::default(),
@@ -359,6 +434,7 @@ impl<'bound> TryFrom<&'bound TraitBound> for Blueprint<'bound> {
             .map(|result| parse_str::<ItemTrait>(result))
         {
             Ok(Self {
+                ty: None,
                 schematic: TraitSchematic(schematic),
                 bound,
                 methods: Default::default(),
@@ -408,10 +484,21 @@ impl<'bound> BlueprintsMap<'bound> {
         deduplicates.iter().for_each(|m| f(m.1))
     }
 
-    pub fn find_and_attach(&mut self, id: &UniqueHashId<Type>, variant_sig: &VariantSig) -> bool {
+    pub fn find_and_attach(
+        &mut self,
+        id: &UniqueHashId<Type>,
+        variant_sig: &VariantSig,
+        ty: Option<&Type>,
+    ) -> bool {
         if let Some(bp_list) = self.get_mut(id) {
             for blueprint in bp_list.iter_mut() {
-                blueprint.attach(variant_sig)
+                blueprint.attach(variant_sig);
+
+                // This will ensure that we only select the first ty.
+                if ty.is_some() && blueprint.ty.is_none() {
+                    // Ouff, a lot of copying. Maybe use a reference?
+                    blueprint.ty = Some(Box::from(unsafe { ty.unwrap_unchecked() }.clone()))
+                }
             }
             true
         } else {

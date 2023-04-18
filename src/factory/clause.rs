@@ -1,8 +1,7 @@
-use std::borrow::Borrow;
-
 use proc_macro2::Ident;
+use quote::format_ident;
 use syn::{
-    punctuated::Punctuated, token, BoundLifetimes, Lifetime, Path, Token, TraitBoundModifier, Type,
+    punctuated::Punctuated, token, BoundLifetimes, Lifetime, Token, TraitBoundModifier, Type,
 };
 
 mod parse;
@@ -48,7 +47,7 @@ pub struct TraitBound {
     pub dispatch: Option<Token![^]>,
     pub modifier: TraitBoundModifier,
     pub lifetimes: Option<BoundLifetimes>,
-    pub path: Path,
+    pub ty: Type,
 }
 
 impl TypeParamBound {
@@ -62,12 +61,16 @@ impl TypeParamBound {
 }
 
 impl TraitBound {
-    pub fn get_ident(&self) -> &Ident {
-        self.path
-            .segments
-            .last()
-            .expect("dispatchable trait to have a name")
-            .ident
-            .borrow()
+    pub fn get_ident(&self) -> Ident {
+        if let Type::Path(p) = &self.ty {
+            p.path
+                .segments
+                .last()
+                .expect("dispatchable trait to have a name")
+                .ident
+                .clone()
+        } else {
+            format_ident!("{}", "omg")
+        }
     }
 }
