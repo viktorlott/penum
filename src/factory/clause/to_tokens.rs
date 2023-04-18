@@ -52,7 +52,7 @@ impl ToTokens for TraitBound {
         let to_tokens = |tokens: &mut TokenStream| {
             self.modifier.to_tokens(tokens);
             self.lifetimes.to_tokens(tokens);
-            self.path.to_tokens(tokens);
+            self.ty.to_tokens(tokens);
         };
         match &self.paren_token {
             Some(paren) => paren.surround(tokens, to_tokens),

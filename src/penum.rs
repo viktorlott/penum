@@ -102,7 +102,7 @@ impl Penum<Disassembled> {
             //    - Failure: add a "no_match_found" error and continue
             //      to next variant.
             // 2. Validate each parameter    ...continue... (INNER)
-            for (variant_ident, comp_item) in self.subject.get_comparable_fields() {
+            for (variant_ident, comp_item) in self.subject.comparable_fields_iter() {
                 // FIXME: This only affects concrete types.. but
                 //  `.compare(..)` should return a list of matches
                 //  instead of just the first match it finds.
@@ -172,7 +172,11 @@ impl Penum<Disassembled> {
                                 arity,
                             );
 
-                            blueprints.find_and_attach(&item_ty_unique, &variant_sig);
+                            blueprints.find_and_attach(
+                                &item_ty_unique,
+                                &variant_sig,
+                                Some(&item_ty_unique),
+                            );
                         }
                         self.types
                             .polymap_insert(item_ty_unique.clone(), item_ty_unique);
@@ -210,9 +214,6 @@ impl Penum<Disassembled> {
                         self.types
                             .polymap_insert(unique_impl_id.clone().into(), item_ty_unique);
                     } else {
-                        // NOTE: This string only contains the Ident, so any generic parameters will
-                        // be discarded.
-                        let pat_ty_string = pat_field.ty.get_string();
                         let pat_ty_unique = pat_field.ty.get_unique_id();
 
                         let variant_sig = VariantSig::new(
@@ -235,7 +236,11 @@ impl Penum<Disassembled> {
                             if item_ty_unique.eq(&pat_ty_unique) {
                                 // Continuing means that we wont add T bounds to polymap
                                 if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                                    blueprints.find_and_attach(&pat_ty_unique, &variant_sig);
+                                    blueprints.find_and_attach(
+                                        &pat_ty_unique,
+                                        &variant_sig,
+                                        Some(&item_ty_unique),
+                                    );
                                 };
 
                                 self.types
@@ -243,7 +248,11 @@ impl Penum<Disassembled> {
                             } else {
                                 if let Some(blueprints) = maybe_blueprint_map.as_mut() {
                                     for ty_unique in [&pat_ty_unique, &item_ty_unique] {
-                                        blueprints.find_and_attach(ty_unique, &variant_sig);
+                                        blueprints.find_and_attach(
+                                            ty_unique,
+                                            &variant_sig,
+                                            Some(&item_ty_unique),
+                                        );
                                     }
                                 };
 
@@ -256,7 +265,11 @@ impl Penum<Disassembled> {
                         } else if pat_field.ty.is_placeholder() {
                             // Make sure we map the concrete type instead of the pat_ty
                             if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                                blueprints.find_and_attach(&item_ty_unique, &variant_sig);
+                                blueprints.find_and_attach(
+                                    &item_ty_unique,
+                                    &variant_sig,
+                                    Some(&item_ty_unique),
+                                );
                             }
                             self.types
                                 .polymap_insert(item_ty_unique.clone(), item_ty_unique);
@@ -265,7 +278,11 @@ impl Penum<Disassembled> {
                         } else if item_ty_unique.eq(&pat_ty_unique) {
                             // 3. Dispachable list
                             if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                                blueprints.find_and_attach(&item_ty_unique, &variant_sig);
+                                blueprints.find_and_attach(
+                                    &item_ty_unique,
+                                    &variant_sig,
+                                    Some(&item_ty_unique),
+                                );
                             }
 
                             self.types.polymap_insert(
@@ -275,6 +292,9 @@ impl Penum<Disassembled> {
                         } else {
                             // TODO: Refactor into TypeId instead.
                             let item_ty_string = field_item.ty.get_string();
+                            // NOTE: This string only contains the Ident, so any generic parameters will
+                            // be discarded.
+                            let pat_ty_string = pat_field.ty.get_string();
 
                             self.error.extend_spanned(
                                 &field_item.ty,

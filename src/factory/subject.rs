@@ -26,7 +26,7 @@ impl Subject {
         &self.data.variants
     }
 
-    pub fn get_comparable_fields(&self) -> impl Iterator<Item = (&Ident, Comparable<Fields>)> {
+    pub fn comparable_fields_iter(&self) -> impl Iterator<Item = (&Ident, Comparable<Fields>)> {
         self.get_variants()
             .iter()
             .map(|variant| (&variant.ident, Comparable::from(&variant.fields)))

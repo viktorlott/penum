@@ -64,20 +64,25 @@ enum Mine4 {
     V3(usize, i32),
 }
 
-#[penum( (T) | (T, U) where T: ^Trait, T: ^Trait2)]
+#[penum]
+trait Cool {
+    type Target;
+    fn mine(&self, value: Self::Target) -> &i32;
+}
+
+impl Cool for i32 {
+    type Target = String;
+    fn mine(&self, value: String) -> &i32 {
+        self
+    }
+}
+
+#[penum( _ where i32: ^Cool )]
 enum Mine5 {
     V1(i32),
     V2(i32),
     V3(i32, i32),
 }
-// impl Trait2 for Mine4 {
-//     fn go2(&self) -> String {
-//         match self {
-//             Mine4::V3(val, ..) => val.go2(),
-//             _ => "".to_string(),
-//         }
-//     }
-// }
 
 fn main() {
     let m = Mine::V2(20);

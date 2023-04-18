@@ -3,7 +3,7 @@ use syn::{
     parenthesized,
     parse::{Parse, ParseStream, Result},
     punctuated::Punctuated,
-    token, BoundLifetimes, Lifetime, ParenthesizedGenericArguments, Path, PathArguments, Token,
+    token, BoundLifetimes, Lifetime, ParenthesizedGenericArguments, PathArguments, Token,
     TraitBoundModifier,
 };
 
@@ -140,9 +140,8 @@ impl Parse for TraitBound {
             // let name_trait: Ident = input.fork().parse()?;
 
             // TODO: We should also check if the trait that comes after exists in our "allow" list.
-            //       The allow list should for now contain core traits.
-            //       We do all this just to support `^` (dispatch) symbol.
-
+            // The allow list should for now contain core traits.
+            // We do all this just to support `^` (dispatch) symbol.
             Some(token)
         } else {
             None
@@ -151,14 +150,18 @@ impl Parse for TraitBound {
         let modifier: TraitBoundModifier = input.parse()?;
         let lifetimes: Option<BoundLifetimes> = input.parse()?;
 
-        let mut path: Path = input.parse()?;
-        if path.segments.last().unwrap().arguments.is_empty()
-            && (input.peek(token::Paren) || input.peek(Token![::]) && input.peek3(token::Paren))
-        {
-            input.parse::<Option<Token![::]>>()?;
-            let args: ParenthesizedGenericArguments = input.parse()?;
-            let parenthesized = PathArguments::Parenthesized(args);
-            path.segments.last_mut().unwrap().arguments = parenthesized;
+        let mut ty: Type = input.parse()?;
+
+        // FIXME: Should probably look over this again
+        if let Type::Path(ref mut path) = ty {
+            if path.path.segments.last().unwrap().arguments.is_empty()
+                && (input.peek(token::Paren) || input.peek(Token![::]) && input.peek3(token::Paren))
+            {
+                input.parse::<Option<Token![::]>>()?;
+                let args: ParenthesizedGenericArguments = input.parse()?;
+                let parenthesized = PathArguments::Parenthesized(args);
+                path.path.segments.last_mut().unwrap().arguments = parenthesized;
+            }
         }
 
         Ok(TraitBound {
@@ -166,7 +169,7 @@ impl Parse for TraitBound {
             dispatch,
             modifier,
             lifetimes,
-            path,
+            ty,
         })
     }
 }
