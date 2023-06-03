@@ -1,10 +1,5 @@
 #![allow(unused)]
 
-enum Stage {
-    Before,
-    After,
-}
-
 #[penum::fmt]
 enum EnumVariants {
     Variant0 = "Return on match",
