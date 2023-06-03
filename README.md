@@ -56,11 +56,19 @@ You can now use enum `descriminants` as expression blocks for `ToString` and `Di
 ```rust
 #[penum::to_string]
 enum EnumVariants {
-    Variant0 = "Return on match",
-    Variant1(i32) = "Return {f0} on match",
-    Variant2(i32, u32) = stringify!(f0, f1).to_string(),
-    Variant3 { name: String } = format!("My string {name}"),
-    Variant4 { age: u32 } = age.to_string(),
+    Variant0                    = "Return on match",
+    Variant1(i32)               = "Return {f0} on match",
+    Variant2(i32, u32)          = stringify!(f0, f1).to_string(),
+    Variant3 { name: String }   = format!("My string {name}"),
+    Variant4 { age: u32 }       = age.to_string(),
+    Variant5 { list: Vec<u32> } = {
+        let string = list
+            .iter()
+            .map(ToString::to_string)
+            .join(", ");
+
+        format!("List: ({string})")
+    },
 }
 
 let enum_variants = Enum::Variant0;
