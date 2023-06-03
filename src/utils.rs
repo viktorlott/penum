@@ -16,7 +16,7 @@ use syn::{
     punctuated::Punctuated,
     spanned::Spanned,
     token::{self},
-    Token, TraitBound, Type, Variant, WhereClause,
+    Expr, Fields, Token, TraitBound, Type, Variant, WhereClause,
 };
 
 use crate::{
@@ -161,6 +161,61 @@ pub fn lifetime_not_permitted() -> &'static str {
 
 pub fn create_unique_ident(value: &str, tag: &Ident, span: Span) -> Ident {
     format_ident!("_{}_{}", tag, value, span = span)
+}
+
+/// I just wanted to add this quickly and try it out, so I need to refactor this once I'm done testing.
+pub fn variants_to_arms<'a>(
+    variants: impl Iterator<Item = &'a Variant>,
+    wapper: impl Fn(&'a Expr) -> proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    variants
+        .filter_map(|variant| {
+            variant.discriminant.as_ref()?;
+            let name = &variant.ident;
+            let (_, expr) = variant.discriminant.as_ref().unwrap();
+
+            let expr_toks = match expr {
+                syn::Expr::Lit(_) => wapper(expr),
+                _ => expr.to_token_stream(),
+            };
+
+            let arm = match &variant.fields {
+                Fields::Named(named) => {
+                    let fields = named.named.iter().enumerate().map(|(_, f)| {
+                        let name = f.ident.as_ref();
+                        quote::quote!(#name)
+                    });
+
+                    let tokens: proc_macro2::TokenStream =
+                        itertools::intersperse(fields, quote::quote!(,)).collect();
+
+                    quote::quote!(
+                        Self::#name { #tokens } => { #expr_toks },
+                    )
+                }
+                Fields::Unnamed(tup) => {
+                    let fields = tup
+                        .unnamed
+                        .iter()
+                        .enumerate()
+                        .map(|(i, _)| format_ident!("f{i}").to_token_stream());
+
+                    let tokens: proc_macro2::TokenStream =
+                        itertools::intersperse(fields, quote::quote!(,)).collect();
+
+                    quote::quote!(
+                        Self::#name ( #tokens ) => { #expr_toks },
+                    )
+                }
+                Fields::Unit => {
+                    quote::quote!(
+                            Self::#name => { #expr_toks },
+                    )
+                }
+            };
+            Some(arm)
+        })
+        .collect()
 }
 
 #[cfg(test)]

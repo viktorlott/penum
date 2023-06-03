@@ -48,6 +48,29 @@ Or run this command in your cargo project:
 ```sh
 $ cargo add penum
 ```
+
+## Latest feature
+
+You can now use enum `descriminants` as expression blocks for `ToString` and `Display`.
+
+```rust
+#[penum::to_string]
+enum EnumVariants {
+    Variant0 = "Return on match",
+    Variant1(i32) = "Return {f0} on match",
+    Variant2(i32, u32) = stringify!(f0, f1).to_string(),
+    Variant3 { name: String } = format!("My string {name}"),
+    Variant4 { age: u32 } = age.to_string(),
+}
+
+let enum_variants = Enum::Variant0;
+println!("{}", enum_variants.to_string());
+```
+
+Add the attribute `#[penum::to_string]` or `#[penum::fmt]` to replace strict enum descriminant.
+
+------------------------------------------------------------------
+
 ## Overview 
 
 A `Penum` expression can look like this:

@@ -168,7 +168,7 @@ impl PenumExpr {
     ///
     /// SOLUTION: We could keep this as it is, and instead fold our blueprints map so that types with the
     /// same trait bounds are combined.
-    pub fn get_blueprints(&self, error: &mut Diagnostic) -> Option<BlueprintsMap> {
+    pub fn get_blueprints_map(&self, error: &mut Diagnostic) -> Option<BlueprintsMap> {
         let Some(clause) = self.clause.as_ref() else {
             return None
         };
@@ -280,7 +280,7 @@ impl PatComposite {
             // "SAFETY": This is not recommended. The thing is that we
             //           are transmuting an empty iter that is created
             //           from a static Punctuated struct. The lifetime
-            //           is invariant in Iter<'_> which mean that we are
+            //           is invariant in Iter<'_> which means that we are
             //           not allowed to return another lifetime, even if
             //           it outlives 'a. It should be "okay" given its
             //           static and empty, but I'm not 100% sure if this

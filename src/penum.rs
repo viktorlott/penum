@@ -94,7 +94,7 @@ impl Penum<Disassembled> {
             // during the dispatch step. Should add
             // `has_dispatchable_member` maybe? let has_clause =
             // self.expr.has_clause(); Turn into iterator instead?
-            let mut maybe_blueprint_map = self.expr.get_blueprints(error);
+            let mut maybe_blueprint_map = self.expr.get_blueprints_map(error);
 
             // For each variant:
             // 1. Validate its shape by comparing discriminant and

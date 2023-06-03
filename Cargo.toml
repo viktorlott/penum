@@ -23,6 +23,7 @@ doctest = false
 
 [dependencies]
 cargo-release = "0.24.8"
+itertools = "0.10.5"
 proc-macro2 = "1.0.51"
 quote = "1.0.23"
 syn = { version = "1.0.109", features = [

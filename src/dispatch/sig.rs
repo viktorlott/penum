@@ -139,7 +139,7 @@ impl<'a> Position<'a> {
                 Composite::Unnamed(punc, token::Paren(field.span()))
             }
             Position::Key(key) => {
-                punc.push_value(Param::Ident(key.deref().clone()));
+                punc.push_value(Param::Ident((*key).clone()));
                 if arity > 1 {
                     punc.push_punct(Comma(key.span()));
                     punc.push_value(Param::Rest);

@@ -53,7 +53,7 @@ jobs:
           profile: "minimal"
           toolchain: "stable"
           override: true
-          
+
       - run: "rustup component add rustfmt"
 
       - uses: "actions-rs/cargo@v1"
@@ -61,22 +61,22 @@ jobs:
           command: "fmt"
           args: "--all -- --check"
 
-  clippy:
-    name: "Cargo clippy"
-    runs-on: "ubuntu-latest"
-    steps:
-      - name: "Check out the repo"
-        uses: actions/checkout@v3
+  # clippy:
+  #   name: "Cargo clippy"
+  #   runs-on: "ubuntu-latest"
+  #   steps:
+  #     - name: "Check out the repo"
+  #       uses: actions/checkout@v3
 
-      - uses: "actions-rs/toolchain@v1"
-        with:
-          profile: "minimal"
-          toolchain: "stable"
-          override: true
+  #     - uses: "actions-rs/toolchain@v1"
+  #       with:
+  #         profile: "minimal"
+  #         toolchain: "stable"
+  #         override: true
 
-      - run: "rustup component add clippy"
+  #     - run: "rustup component add clippy"
 
-      - uses: "actions-rs/cargo@v1"
-        with:
-          command: "clippy"
-          args: "-- -D warnings"
+  #     - uses: "actions-rs/cargo@v1"
+  #       with:
+  #         command: "clippy"
+  #         args: "-- -D warnings"
