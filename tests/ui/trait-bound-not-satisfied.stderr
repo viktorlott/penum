@@ -5,4 +5,3 @@ error[E0277]: the trait bound `usize: Trait` is not satisfied
   |            ^^^^^ the trait `Trait` is not implemented for `usize`
   |
   = help: see issue #48214
-  = help: add `#![feature(trivial_bounds)]` to the crate attributes to enable
