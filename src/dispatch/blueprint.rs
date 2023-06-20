@@ -1,4 +1,3 @@
-#![allow(suspicious_double_ref_op)]
 use std::borrow::Borrow;
 use std::borrow::BorrowMut;
 use std::collections::BTreeMap;

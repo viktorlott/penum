@@ -1,8 +1,10 @@
 #![doc = include_str!("../README.md")]
 
+use factory::TraitBound;
 use proc_macro::TokenStream;
 use quote::ToTokens;
 use syn::parse_macro_input;
+use syn::Type;
 
 use syn::ItemTrait;
 
@@ -204,6 +206,63 @@ pub fn fmt(_: TokenStream, input: TokenStream) -> TokenStream {
 
         impl std::fmt::Display for #enum_name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    #matching_arms
+                    _ => #has_default
+                }
+            }
+        }
+    )
+    .to_token_stream()
+    .into()
+}
+
+/// Use this to express how `Into<T>` should be implemented through variants descriminant.
+///
+/// ```rust
+/// #[penum::into(String)]
+/// enum EnumVariants {
+///     Variant0 = "Return on match".into(),
+///     Variant1(i32) = format!("Return {f0} on match"),
+///     Variant2(i32, u32) = stringify!(f0, f1).to_string(),
+///     Variant3 { name: String } = format!("My string {name}"),
+///     Variant4 { age: u32 } =  age.to_string(),
+/// }
+/// let enum_variants = Enum::Variant0;
+/// println!("{}", enum_variants.into());
+/// ```
+#[proc_macro_attribute]
+pub fn into(attr: TokenStream, input: TokenStream) -> TokenStream {
+    let ty = parse_macro_input!(attr as Type);
+    let mut subject = parse_macro_input!(input as Subject);
+
+    let matching_arms: proc_macro2::TokenStream =
+        variants_to_arms(subject.get_variants().iter(), |expr| quote::quote!(#expr));
+
+    let mut has_default = quote::quote!(Default::default()).to_token_stream();
+    subject.data.variants = subject
+        .data
+        .variants
+        .into_iter()
+        .filter_map(|mut variant| {
+            if variant.discriminant.is_some() && variant.ident == "__Default__" {
+                let (_, expr) = variant.discriminant.as_ref().unwrap();
+                has_default = quote::quote!(#expr);
+                return None;
+            }
+
+            variant.discriminant = None;
+            Some(variant)
+        })
+        .collect();
+
+    let enum_name = &subject.ident;
+
+    quote::quote!(
+        #subject
+
+        impl Into<#ty> for #enum_name {
+            fn into(self) -> #ty {
                 match self {
                     #matching_arms
                     _ => #has_default
