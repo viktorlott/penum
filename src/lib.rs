@@ -1,6 +1,8 @@
 #![doc = include_str!("../README.md")]
 
+use factory::Strukt;
 use proc_macro::TokenStream;
+use quote::format_ident;
 use quote::ToTokens;
 use syn::parse_macro_input;
 use syn::Type;
@@ -272,6 +274,76 @@ pub fn into(attr: TokenStream, input: TokenStream) -> TokenStream {
                     #matching_arms
                     _ => #has_default
                 }
+            }
+        }
+    )
+    .to_token_stream()
+    .into()
+}
+/// ___________________________________________________________________________________
+/// Use this to express how `Into<T>` should be implemented through variants descriminant.
+///
+/// # Example
+///
+/// ```rust
+/// #[penum::into(String)]
+/// enum EnumVariants {
+///     Variant0 = "Return on match".into(),
+///     Variant1(i32) = format!("Return {f0} on match"),
+///     Variant2(i32, u32) = stringify!(f0, f1).to_string(),
+///     Variant3 { name: String } = format!("My string {name}"),
+///     Variant4 { age: u32 } =  age.to_string(),
+/// }
+/// let enum_variants = Enum::Variant0;
+/// println!("{}", enum_variants.into());
+/// ```
+#[proc_macro_attribute]
+pub fn strukter(attr: TokenStream, input: TokenStream) -> TokenStream {
+    println!("got here!!!!!!");
+    let ty = parse_macro_input!(attr as Type);
+    let mut strukt = parse_macro_input!(input as Strukt);
+
+    let strukt_name = &strukt.ident;
+
+    let pattern = match &strukt.data.fields {
+        factory::FieldsKind::Named(named) => {
+            let tokens: proc_macro2::TokenStream = itertools::intersperse(
+                named.named.iter().map(|n| n.ident.to_token_stream()),
+                quote::quote!(,),
+            )
+            .collect();
+
+            quote::quote!(& #strukt_name {#tokens}: Self)
+        }
+        factory::FieldsKind::Unnamed(unnamed) => {
+            let tokens: proc_macro2::TokenStream = itertools::intersperse(
+                unnamed
+                    .unnamed
+                    .iter()
+                    .enumerate()
+                    .map(|(i, n)| format_ident!("f{i}").to_token_stream()),
+                quote::quote!(,),
+            )
+            .collect();
+
+            quote::quote!(& #strukt_name (#tokens): Self)
+        }
+        factory::FieldsKind::Unit => todo!(),
+    };
+
+    // let expr_toks = match expr {
+    //     syn::Expr::Lit(_) => wapper(expr),
+    //     _ => expr.to_token_stream(),
+    // };
+
+    println!("GOT {}", pattern);
+
+    quote::quote!(
+        #strukt
+
+        impl std::string::ToString for #strukt_name {
+            fn to_string(#pattern) -> String {
+                format!("")
             }
         }
     )

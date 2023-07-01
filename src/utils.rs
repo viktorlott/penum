@@ -7,7 +7,7 @@ use std::{
     sync::Once,
 };
 
-use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, ToTokens};
 use syn::{
     braced,
@@ -21,7 +21,7 @@ use syn::{
 
 use crate::{
     error::Diagnostic,
-    factory::{PatComposite, PatFrag},
+    factory::{FieldDisc, FieldsKind, PatComposite, PatFrag, Strukt},
     penum::{Stringify, TraitBoundUtils},
 };
 
@@ -218,6 +218,13 @@ pub fn variants_to_arms<'a>(
         })
         .collect()
 }
+
+// pub fn fields_to_arms<'a>(
+//     fields: &'a FieldsKind,
+//     wapper: impl Fn(&'a Expr) -> proc_macro2::TokenStream,
+// ) -> proc_macro2::TokenStream {
+
+// }
 
 pub fn create_impl_string<'a>(
     bounds: &'a Punctuated<TypeParamBound, Add>,

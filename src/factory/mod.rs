@@ -7,10 +7,12 @@ use syn::Fields;
 
 mod clause;
 mod pattern;
+mod strukt;
 mod subject;
 
 pub use clause::*;
 pub use pattern::*;
+pub use strukt::*;
 pub use subject::*;
 
 // ComPairAble would be a stupid name

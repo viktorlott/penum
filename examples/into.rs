@@ -9,6 +9,15 @@ enum EnumVariants {
     Variant4 { age: u32 } = age.to_string(),
 }
 
+struct Name {
+    name: String,
+}
+
+#[penum::strukter]
+struct A {
+    name: x!(Name = ""),
+}
+
 fn main() {
     let enum_variants = EnumVariants::Variant0;
     let string: String = enum_variants.into();
