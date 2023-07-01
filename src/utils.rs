@@ -15,13 +15,14 @@ use syn::{
     parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    token::{self},
-    Expr, Fields, Token, TraitBound, Type, Variant, WhereClause,
+    token::{self, Add},
+    Expr, Fields, Token, TraitBound, Type, TypeParamBound, Variant, WhereClause,
 };
 
 use crate::{
+    error::Diagnostic,
     factory::{PatComposite, PatFrag},
-    penum::Stringify,
+    penum::{Stringify, TraitBoundUtils},
 };
 
 pub struct Static<T, F = fn() -> T>(UnsafeCell<Option<T>>, Once, F);
@@ -216,6 +217,34 @@ pub fn variants_to_arms<'a>(
             Some(arm)
         })
         .collect()
+}
+
+pub fn create_impl_string<'a>(
+    bounds: &'a Punctuated<TypeParamBound, Add>,
+    error: &'a mut Diagnostic,
+) -> Option<String> {
+    let mut impl_string = String::new();
+
+    for bound in bounds.iter() {
+        match bound {
+            syn::TypeParamBound::Trait(trait_bound) => {
+                if let syn::TraitBoundModifier::None = trait_bound.modifier {
+                    impl_string.push_str(&trait_bound.get_unique_trait_bound_id())
+                } else {
+                    error.extend(bound.span(), maybe_bounds_not_permitted(trait_bound));
+                }
+            }
+            syn::TypeParamBound::Lifetime(_) => {
+                error.extend_spanned(bound, lifetime_not_permitted());
+            }
+        }
+    }
+
+    if error.has_error() || impl_string.is_empty() {
+        None
+    } else {
+        Some(impl_string)
+    }
 }
 
 #[cfg(test)]

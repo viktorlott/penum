@@ -51,7 +51,7 @@ $ cargo add penum
 
 ## Latest feature
 
-You can now use enum `descriminants` as expression blocks for `ToString`, `Display` and `Into<T>`.
+You can now use enum `discriminants` as expression blocks for `ToString`, `Display` and `Into<T>`.
 
 ```rust
 #[penum::to_string]
