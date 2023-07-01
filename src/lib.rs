@@ -1,6 +1,5 @@
 #![doc = include_str!("../README.md")]
 
-use factory::TraitBound;
 use proc_macro::TokenStream;
 use quote::ToTokens;
 use syn::parse_macro_input;
@@ -107,6 +106,8 @@ pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Use this to express how `ToString` should be implemented through variants descriminant.
 ///
+/// # Example
+///
 /// ```rust
 /// #[penum::to_string]
 /// enum EnumVariants {
@@ -163,6 +164,8 @@ pub fn to_string(_: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Use this to express how `Display` should be implemented through variants descriminant.
 ///
+/// # Example
+///
 /// ```rust
 /// #[penum::fmt]
 /// enum EnumVariants {
@@ -218,6 +221,8 @@ pub fn fmt(_: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// Use this to express how `Into<T>` should be implemented through variants descriminant.
+///
+/// # Example
 ///
 /// ```rust
 /// #[penum::into(String)]

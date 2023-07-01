@@ -7,13 +7,11 @@ use quote::format_ident;
 use quote::ToTokens;
 
 use syn::punctuated::Punctuated;
-use syn::token::Add;
 use syn::token::Comma;
 use syn::Ident;
 use syn::ItemImpl;
 use syn::TraitBound;
 use syn::TypeImplTrait;
-use syn::TypeParamBound;
 
 use syn::parse_quote;
 use syn::spanned::Spanned;
@@ -27,9 +25,8 @@ use crate::factory::WherePredicate;
 use crate::dispatch::VariantSig;
 use crate::error::Diagnostic;
 
+use crate::utils::create_impl_string;
 use crate::utils::create_unique_ident;
-use crate::utils::lifetime_not_permitted;
-use crate::utils::maybe_bounds_not_permitted;
 use crate::utils::no_match_found;
 use crate::utils::PolymorphicMap;
 use crate::utils::UniqueHashId;
@@ -490,34 +487,6 @@ impl TypeUtils for Type {
 impl TraitBoundUtils for TraitBound {
     fn get_unique_trait_bound_id(&self) -> String {
         UniqueHashId(self).get_unique_string()
-    }
-}
-
-fn create_impl_string<'a>(
-    bounds: &'a Punctuated<TypeParamBound, Add>,
-    error: &'a mut Diagnostic,
-) -> Option<String> {
-    let mut impl_string = String::new();
-
-    for bound in bounds.iter() {
-        match bound {
-            syn::TypeParamBound::Trait(trait_bound) => {
-                if let syn::TraitBoundModifier::None = trait_bound.modifier {
-                    impl_string.push_str(&trait_bound.get_unique_trait_bound_id())
-                } else {
-                    error.extend(bound.span(), maybe_bounds_not_permitted(trait_bound));
-                }
-            }
-            syn::TypeParamBound::Lifetime(_) => {
-                error.extend_spanned(bound, lifetime_not_permitted());
-            }
-        }
-    }
-
-    if error.has_error() || impl_string.is_empty() {
-        None
-    } else {
-        Some(impl_string)
     }
 }
 
