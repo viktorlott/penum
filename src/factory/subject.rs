@@ -230,19 +230,29 @@ impl Subject {
             .variants
             .into_iter()
             .filter_map(|mut variant| {
-                if variant.discriminant.is_some() && variant.ident == DEFAULT_VARIANT_SYMBOL {
-                    let (_, expr) = variant.discriminant.as_ref().unwrap();
-                    // This is a bad idea.. But I'm to lazy to change this implementation.
-                    // Note that we are assuming that when `default_else` is None, we are in a
-                    // `to_string` context, and because we are handling `default` we want to wrap this
-                    // in a `format!()`. So given a `default = "hello from enum"`, we want it to end up
-                    // being `default = format!("hello from enum")` implicitly.
-                    has_default = Some(if default_else.is_none() {
-                        quote::quote!(format!(#expr))
-                    } else {
-                        quote::quote!(#expr)
-                    });
-                    return None;
+                if variant.discriminant.is_some() {
+                    let variant_comment = format!(
+                        include_str!("../template/variant_comment.md"),
+                        variant.get_string()
+                    );
+                    variant
+                        .attrs
+                        .push(syn::parse_quote!(#[doc = #variant_comment]));
+
+                    if variant.ident == DEFAULT_VARIANT_SYMBOL {
+                        let (_, expr) = variant.discriminant.as_ref().unwrap();
+                        // This is a bad idea.. But I'm to lazy to change this implementation.
+                        // Note that we are assuming that when `default_else` is None, we are in a
+                        // `to_string` context, and because we are handling `default` we want to wrap this
+                        // in a `format!()`. So given a `default = "hello from enum"`, we want it to end up
+                        // being `default = format!("hello from enum")` implicitly.
+                        has_default = Some(if default_else.is_none() {
+                            quote::quote!(format!(#expr))
+                        } else {
+                            quote::quote!(#expr)
+                        });
+                        return None;
+                    }
                 }
 
                 variant.discriminant = None;

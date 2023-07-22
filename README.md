@@ -59,7 +59,7 @@ This could be useful as an alternative to const declarations, and also, to avoid
 enum EnumVariants {
     Variant0                    = "Return on match",
     Variant1(i32)               = "Return {f0} on match",
-    Variant2(i32, u32)          = stringify!(f0, f1),
+    Variant2(i32, u32)          = stringify!(f0, f1).to_string(),
     Variant3 { name: String }   = format!("My string {name}"),
     Variant4 { age: u32 }       = age.to_string(),
     Variant5                    = EnumVariants::Variant0.to_string(),
@@ -67,7 +67,7 @@ enum EnumVariants {
         let string = list
             .iter()
             .map(ToString::to_string)
-            .join(", ");
+            .collect::<String>();
 
         format!("List: ({string})")
     },
