@@ -1,9 +1,8 @@
 use proc_macro::TokenStream;
 use quote::ToTokens;
 use syn::parse_macro_input;
-use syn::Type;
-
 use syn::ItemTrait;
+use syn::Type;
 
 use crate::dispatch::T_SHM;
 use crate::factory::PenumExpr;
@@ -200,15 +199,12 @@ pub fn static_str(input: TokenStream) -> TokenStream {
 
             quote::quote!(
                 impl AsRef<str> for #enum_name {
-                    fn as_ref(&self) -> &str {
-                        &**self
-                    }
+                    fn as_ref(&self) -> &str { &**self }
                 }
 
                 impl #enum_name {
-                    fn as_str(&self) -> &str  {
-                        &**self
-                    }
+                    fn as_str(&self) -> &str  { &**self }
+                    fn static_str(&self) -> &str { &**self }
                 }
             )
         }),

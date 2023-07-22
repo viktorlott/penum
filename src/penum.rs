@@ -41,11 +41,22 @@ type PolyMap = PolymorphicMap<UniqueHashId<Type>, UniqueHashId<Type>>;
 /// It contains everything we need to construct our dispatcher and
 /// pattern validator.
 pub struct Penum<State = Disassembled> {
+    /// A Penum expression consists of one or more patterns, and an optional WhereClause.
     expr: PenumExpr,
+
+    /// The enum (or ADT in the future) that we will read and specialize.
     subject: Subject,
+
+    /// A simple macro diagnostic struct that we use to append compiler errors with span information.
     error: Diagnostic,
+
+    /// I use this to map generics to concrete types that I then can use during substitution stage.
     types: PolyMap,
+
+    /// Contains all the impls that we've managed to construct.
     impls: Vec<ItemImpl>,
+
+    /// Only used as a DX marker that seperates methods between Disassembled <> Assembled.
     _marker: PhantomData<State>,
 }
 
@@ -54,6 +65,9 @@ impl Penum<Disassembled> {
         Self {
             expr,
             subject,
+            // It's kind of annoying that I have to impl `Default` for `expr` and `subject` for the
+            // spread operator to work `..Default::default()`
+            // NOTE: I could extract these fields into another struct.
             error: Default::default(),
             types: Default::default(),
             impls: Default::default(),
@@ -426,6 +440,7 @@ impl Penum<Assembled> {
     }
 }
 
+// NOTE: I will eventually clean this mess up
 pub trait Stringify: ToTokens {
     fn get_string(&self) -> String {
         self.to_token_stream().to_string()

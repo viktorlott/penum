@@ -51,7 +51,9 @@ $ cargo add penum
 
 ## Latest feature
 
-You can now use enum `discriminants` as expression blocks for `ToString`, `Display` and `Into<T>`.
+You can now use enum `discriminants` as expression blocks for `ToString`, `Display`, `Into<T>` and `Deref<Target = T>`.
+This could be useful as an alternative to const declarations. Read more about it below.
+
 
 ```rust
 #[penum::to_string]
@@ -61,7 +63,8 @@ enum EnumVariants {
     Variant2(i32, u32)          = stringify!(f0, f1).to_string(),
     Variant3 { name: String }   = format!("My string {name}"),
     Variant4 { age: u32 }       = age.to_string(),
-    Variant5 { list: Vec<u32> } = {
+    Variant5                    = EnumVariants::Variant0.to_string(),
+    Variant6 { list: Vec<u32> } = {
         let string = list
             .iter()
             .map(ToString::to_string)
@@ -75,7 +78,20 @@ let enum_variants = Enum::Variant0;
 println!("{}", enum_variants.to_string());
 ```
 
-Add the attribute `#[penum::to_string]` or `#[penum::fmt]` to replace strict enum descriminant.
+Add one of the following to your enum to enable enum descriminant expressions.
+- `penum::to_string` — Useful when you only want to implement `ToString`.
+
+- `penum::fmt` — Useful when you want to implement `ToString` and `Display`.
+
+- `penum::into(T)` — Useful when you want to convert your variant `Into<T>`.
+
+- `penum::deref(T)` — Useful when you want to utilize Rust auto dereferencer.
+
+- `penum::static_str` — Will implement `Deref<Str>` and `AsRef<str>`, including helper methods
+  like: `.as_str()` and `.static_str()`.
+
+Make sure to also try out `penum::penum` if you like this `feature`. Note that not interoperable
+with `penum::penum`, and should be used separatly, because they are mutually exclusive. 
 
 ------------------------------------------------------------------
 
