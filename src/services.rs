@@ -38,14 +38,14 @@ pub fn penum_expand(attr: TokenStream, input: TokenStream) -> TokenStream {
 pub fn to_string_expand(input: TokenStream) -> TokenStream {
     let subject = parse_macro_input!(input as Subject);
 
-    let matching_arms: proc_macro2::TokenStream =
-        variants_to_arms(subject.get_variants().iter(), |expr| {
-            quote::quote!(format!(#expr))
-        });
+    let matching_arms = variants_to_arms(subject.get_variants().iter(), |expr| {
+        quote::quote!(format!(#expr))
+    });
 
     let (subject, has_default) = censor_discriminants_get_default(subject, None);
 
     let enum_name = &subject.ident;
+
     quote::quote!(
         #subject
 
@@ -65,21 +65,17 @@ pub fn to_string_expand(input: TokenStream) -> TokenStream {
 pub fn fmt_expand(input: TokenStream) -> TokenStream {
     let subject = parse_macro_input!(input as Subject);
 
-    let matching_arms: proc_macro2::TokenStream =
-        variants_to_arms(subject.get_variants().iter(), |expr| {
-            quote::quote!(write!(f, #expr))
-        });
+    let matching_arms = variants_to_arms(subject.get_variants().iter(), |expr| {
+        quote::quote!(write!(f, #expr))
+    });
 
     let (subject, has_default) = censor_discriminants_get_default(
         subject,
-        Some(|dft| {
-            // FIXME: I'm too lazy to make this not look like shit.
-            dft.or(Some(quote::quote!(write!(f, "{}", "".to_string()))))
-                .unwrap()
-        }),
+        Some(quote::quote!(write!(f, "{}", "".to_string()))),
     );
 
     let enum_name = &subject.ident;
+
     quote::quote!(
         #subject
 
@@ -98,28 +94,13 @@ pub fn fmt_expand(input: TokenStream) -> TokenStream {
 
 pub fn into_expand(attr: TokenStream, input: TokenStream) -> TokenStream {
     let ty = parse_macro_input!(attr as Type);
-    let mut subject = parse_macro_input!(input as Subject);
+    let subject = parse_macro_input!(input as Subject);
 
-    let matching_arms: proc_macro2::TokenStream =
+    let matching_arms =
         variants_to_arms(subject.get_variants().iter(), |expr| quote::quote!(#expr));
 
-    let mut has_default = quote::quote!(Default::default()).to_token_stream();
-
-    subject.data.variants = subject
-        .data
-        .variants
-        .into_iter()
-        .filter_map(|mut variant| {
-            if variant.discriminant.is_some() && variant.ident == "__Default__" {
-                let (_, expr) = variant.discriminant.as_ref().unwrap();
-                has_default = quote::quote!(#expr);
-                return None;
-            }
-
-            variant.discriminant = None;
-            Some(variant)
-        })
-        .collect();
+    let (subject, has_default) =
+        censor_discriminants_get_default(subject, Some(quote::quote!(Default::default())));
 
     let enum_name = &subject.ident;
 
@@ -145,30 +126,15 @@ pub fn deref_expand(
     extend: Option<fn(&Subject) -> proc_macro2::TokenStream>,
 ) -> TokenStream {
     let ty = parse_macro_input!(attr as Type);
-    let mut subject = parse_macro_input!(input as Subject);
+    let subject = parse_macro_input!(input as Subject);
 
-    let matching_arms: proc_macro2::TokenStream =
+    let matching_arms =
         variants_to_arms(subject.get_variants().iter(), |expr| quote::quote!(#expr));
 
-    let mut has_default = quote::quote!(Default::default()).to_token_stream();
-    subject.data.variants = subject
-        .data
-        .variants
-        .into_iter()
-        .filter_map(|mut variant| {
-            if variant.discriminant.is_some() && variant.ident == "__Default__" {
-                let (_, expr) = variant.discriminant.as_ref().unwrap();
-                has_default = quote::quote!(#expr);
-                return None;
-            }
-
-            variant.discriminant = None;
-            Some(variant)
-        })
-        .collect();
+    let (subject, has_default) =
+        censor_discriminants_get_default(subject, Some(quote::quote!(Default::default())));
 
     let enum_name = &subject.ident;
-
     let extensions = extend.map(|extend| extend(&subject));
 
     quote::quote!(

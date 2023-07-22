@@ -25,6 +25,8 @@ use crate::{
     penum::{Stringify, TraitBoundUtils},
 };
 
+pub const DEFAULT_VARIANT_NAME: &str = "default";
+
 pub struct Static<T, F = fn() -> T>(UnsafeCell<Option<T>>, Once, F);
 
 #[derive(Default, Debug)]
@@ -173,6 +175,11 @@ pub fn variants_to_arms<'a>(
         .filter_map(|variant| {
             variant.discriminant.as_ref()?;
             let name = &variant.ident;
+
+            if name.get_string().contains(DEFAULT_VARIANT_NAME) {
+                return None;
+            }
+
             let (_, expr) = variant.discriminant.as_ref().unwrap();
 
             let expr_toks = match expr {
@@ -249,7 +256,7 @@ pub fn create_impl_string<'a>(
 
 pub fn censor_discriminants_get_default(
     mut subject: Subject,
-    default_else: Option<fn(Option<proc_macro2::TokenStream>) -> proc_macro2::TokenStream>,
+    default_else: Option<proc_macro2::TokenStream>,
 ) -> (Subject, proc_macro2::TokenStream) {
     let mut has_default = None;
     subject.data.variants = subject
@@ -257,9 +264,19 @@ pub fn censor_discriminants_get_default(
         .variants
         .into_iter()
         .filter_map(|mut variant| {
-            if variant.discriminant.is_some() && variant.ident == "__Default__" {
+            if variant.discriminant.is_some() && variant.ident == DEFAULT_VARIANT_NAME {
+                println!("got here");
                 let (_, expr) = variant.discriminant.as_ref().unwrap();
-                has_default = Some(quote::quote!(#expr));
+                // This is a bad idea.. But I'm to lazy to change this implementation.
+                // Note that we are assuming that when `default_else` is None, we are in a
+                // `to_string` context, and because we are handling `default` we want to wrap this
+                // in a `format!()`. So given a `default = "hello from enum"`, we want it to end up
+                // being `default = format!("hello from enum")` implicitly.
+                has_default = Some(if default_else.is_none() {
+                    quote::quote!(format!(#expr))
+                } else {
+                    quote::quote!(#expr)
+                });
                 return None;
             }
 
@@ -270,7 +287,10 @@ pub fn censor_discriminants_get_default(
 
     (
         subject,
-        default_else.map_or_else(|| quote::quote!("".to_string()), |cb| cb(has_default)),
+        has_default
+            .or(default_else)
+            .or_else(|| Some(quote::quote!("".to_string())))
+            .unwrap(),
     )
 }
 
@@ -294,50 +314,3 @@ mod tests {
         assert_eq!("_2029180714094036370", ty_string2);
     }
 }
-
-// #[derive(Hash, Debug)]
-// pub struct Hashable<'id, T: Hash>(pub &'id T);
-
-// impl<T: Hash + ToTokens> Eq for Hashable<'_, T> {}
-
-// impl<T: Hash + ToTokens> Ord for Hashable<'_, T> {
-//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-//         self.0.to_token_stream().to_string().cmp(&other.0.to_token_stream().to_string())
-//     }
-// }
-
-// impl<T: Hash + ToTokens> PartialEq for Hashable<'_, T> {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.0.to_token_stream().to_string() == other.0.to_token_stream().to_string()
-//     }
-// }
-
-// impl<T: Hash + ToTokens> PartialOrd for Hashable<'_, T> {
-//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-//         self.0.to_token_stream().to_string()
-//             .partial_cmp(&other.0.to_token_stream().to_string())
-//     }
-// }
-
-// #[derive(Default, Debug)]
-// pub struct PolyMap<'id, T: Hash>(BTreeMap<Hashable<'id, T>, BTreeSet<Hashable<'id, T>>>);
-
-// /// Fix these later
-// impl<'id, T: Hash + ToTokens> PolyMap<'id, T> {
-//     pub fn polymap_insert(&'id mut self, pty: &'id T, ity: &'id T) {
-//         let pty = Hashable(pty);
-//         let ity = Hashable(ity);
-
-//         if let Some(set) = self.0.get_mut(&pty) {
-//             set.insert(ity);
-//         } else {
-//             self.0.insert(pty, vec![ity].into_iter().collect());
-//         }
-//     }
-// }
-
-// fn tester() {
-//     let mut pol = PolyMap::default();
-
-//     pol.polymap_insert(pty, ity)
-// }

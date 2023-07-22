@@ -22,6 +22,9 @@ enum ABC {
     A = "HELLO",
     B = concat!("OJ", "df"),
     C = &ABC::A,
+    D,
+    E,
+    default = "D and E will fall through to this",
 }
 
 // enum ABC {
@@ -148,4 +151,7 @@ fn main() {
     accept_str(&nn);
     accept_str(nn.as_str());
     accept_str(nn.as_ref());
+
+    let mn = ABC::D;
+    println!("{}", mn.as_str());
 }

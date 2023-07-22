@@ -13,6 +13,8 @@ enum Foo {
         let x = f0;
         x.to_string()
     },
+    Buz,
+    default = "fallback for Buz",
 }
 
 fn main() {
@@ -23,4 +25,7 @@ fn main() {
         name: "10".to_string(),
     };
     assert_eq!(baz.to_string(), "10");
+
+    let buz = Foo::Buz;
+    assert_eq!(buz.to_string(), "fallback for Buz");
 }
