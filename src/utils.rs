@@ -21,7 +21,7 @@ use syn::{
 
 use crate::{
     error::Diagnostic,
-    factory::{PatComposite, PatFrag},
+    factory::{PatComposite, PatFrag, Subject},
     penum::{Stringify, TraitBoundUtils},
 };
 
@@ -245,6 +245,33 @@ pub fn create_impl_string<'a>(
     } else {
         Some(impl_string)
     }
+}
+
+pub fn censor_discriminants_get_default(
+    mut subject: Subject,
+    default_else: Option<fn(Option<proc_macro2::TokenStream>) -> proc_macro2::TokenStream>,
+) -> (Subject, proc_macro2::TokenStream) {
+    let mut has_default = None;
+    subject.data.variants = subject
+        .data
+        .variants
+        .into_iter()
+        .filter_map(|mut variant| {
+            if variant.discriminant.is_some() && variant.ident == "__Default__" {
+                let (_, expr) = variant.discriminant.as_ref().unwrap();
+                has_default = Some(quote::quote!(#expr));
+                return None;
+            }
+
+            variant.discriminant = None;
+            Some(variant)
+        })
+        .collect();
+
+    (
+        subject,
+        default_else.map_or_else(|| quote::quote!("".to_string()), |cb| cb(has_default)),
+    )
 }
 
 #[cfg(test)]

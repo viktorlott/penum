@@ -17,6 +17,49 @@ impl Trait3 for f32 {}
 trait Advanced {}
 // impl Advanced for usize {}
 
+#[penum::static_str]
+enum ABC {
+    A = "HELLO",
+    B = concat!("OJ", "df"),
+    C = &ABC::A,
+}
+
+// enum ABC {
+//     A,
+//     B,
+//     C,
+// }
+
+// impl std::ops::Deref for ABC {
+//     type Target = str;
+//     fn deref(&self) -> &Self::Target {
+//         match self {
+//             Self::A => "HELLO",
+//             Self::B => {
+//                 concat!("OJ", "df")
+//             }
+//             Self::C => "PEE",
+//             _ => Default::default(),
+//         }
+//     }
+// }
+// enum ABC {
+//     A,
+//     B,
+//     C,
+// }
+// impl std::ops::Deref for ABC {
+//     type Target = str;
+//     fn deref(&self) -> &Self::Target {
+//         match self {
+//             Self::A => "HELLO",
+//             Self::B => "OJ",
+//             Self::C => "PEE",
+//             _ => Default::default(),
+//         }
+//     }
+// }
+
 struct A<T>(T);
 
 impl<T> Trait for A<T> {}
@@ -95,10 +138,14 @@ impl Abc {
     }
 }
 
+fn accept_str(_input: &str) {}
+
 fn main() {
-    let x = Abc("23".to_string());
+    let _x = Abc("23".to_string());
 
-    let m = x.f();
+    let nn = ABC::A;
 
-    println!("wewewe {}", m);
+    accept_str(&nn);
+    accept_str(nn.as_str());
+    accept_str(nn.as_ref());
 }

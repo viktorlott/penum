@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
 use std::ops::Deref;
@@ -153,7 +152,7 @@ impl<'bound> Blueprint<'bound> {
                 // It's not possible to do `&Default::default()` or
                 // `&T::default()` IIRC. A &T where T isn't owned by
                 // self needs to be ZST to be able to be returned.
-                let default_return = match signature.output.borrow() {
+                let default_return = match &signature.output {
                     syn::ReturnType::Default => quote::quote!(()),
                     syn::ReturnType::Type(_, ty) => {
                         return_default_ret_type(ty).unwrap_or_else(return_panic)
@@ -312,7 +311,7 @@ impl<'bound> Blueprint<'bound> {
     fn get_bound_bindings(&self) -> Option<impl Iterator<Item = &Binding>> {
         if let Type::Path(path) = &self.bound.ty {
             let path_segment = path.path.segments.last().unwrap();
-            match path_segment.arguments.borrow() {
+            match &path_segment.arguments {
                 syn::PathArguments::AngleBracketed(angle) => {
                     // NOTE: This can cause us to still return as if we have bindings even though we
                     // might be returning an empty iterator.
@@ -343,7 +342,7 @@ impl<'bound> Blueprint<'bound> {
     fn get_bound_generics(&self) -> Option<impl Iterator<Item = &Type>> {
         if let Type::Path(path) = &self.bound.ty {
             let path_segment = path.path.segments.last().unwrap();
-            match path_segment.arguments.borrow() {
+            match &path_segment.arguments {
                 syn::PathArguments::AngleBracketed(angle) => {
                     Some(angle.args.iter().filter_map(|arg| match arg {
                         syn::GenericArgument::Type(ty) => Some(ty),
@@ -511,7 +510,7 @@ impl<'bound> Deref for BlueprintsMap<'bound> {
     type Target = BTreeMap<UniqueHashId<Type>, Vec<Blueprint<'bound>>>;
 
     fn deref(&self) -> &Self::Target {
-        self.0.borrow()
+        &self.0
     }
 }
 

@@ -1,24 +1,12 @@
 #![doc = include_str!("../README.md")]
 
 use proc_macro::TokenStream;
-use quote::ToTokens;
-use syn::parse_macro_input;
-use syn::Type;
-
-use syn::ItemTrait;
-
-use factory::PenumExpr;
-use factory::Subject;
-use penum::Penum;
-use utils::variants_to_arms;
-
-use crate::dispatch::T_SHM;
-use crate::penum::Stringify;
 
 mod dispatch;
 mod error;
 mod factory;
 mod penum;
+mod services;
 mod utils;
 
 /// Use this to make an enum conform to a pattern with or without trait
@@ -82,26 +70,7 @@ mod utils;
 /// ```
 #[proc_macro_attribute]
 pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
-    // TODO: Make it bi-directional, meaning it's also possible to register enums and then do
-    // the implementations when we tag a trait. (That is actually better).
-    if attr.is_empty() {
-        let output = input.clone();
-        let item_trait = parse_macro_input!(input as ItemTrait);
-
-        // If we cannot find the trait the user wants to dispatch, we need to store it.
-        T_SHM.insert(item_trait.ident.get_string(), item_trait.get_string());
-
-        output
-    } else {
-        let pattern = parse_macro_input!(attr as PenumExpr);
-        let input = parse_macro_input!(input as Subject);
-
-        let penum = Penum::from(pattern, input).assemble();
-
-        // Loop through enum definition and match each variant with each
-        // shape pattern. for each variant => pattern.find(variant)
-        penum.unwrap_or_error()
-    }
+    services::penum_expand(attr, input)
 }
 
 /// Use this to express how `ToString` should be implemented through variants descriminant.
@@ -122,44 +91,7 @@ pub fn penum(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn to_string(_: TokenStream, input: TokenStream) -> TokenStream {
-    let mut subject = parse_macro_input!(input as Subject);
-
-    let matching_arms: proc_macro2::TokenStream =
-        variants_to_arms(subject.get_variants().iter(), |expr| {
-            quote::quote!(format!(#expr))
-        });
-
-    let mut has_default = quote::quote!("".to_string()).to_token_stream();
-    subject.data.variants = subject
-        .data
-        .variants
-        .into_iter()
-        .filter_map(|mut variant| {
-            if variant.discriminant.is_some() && variant.ident == "__Default__" {
-                let (_, expr) = variant.discriminant.as_ref().unwrap();
-                has_default = quote::quote!(#expr);
-                return None;
-            }
-            variant.discriminant = None;
-            Some(variant)
-        })
-        .collect();
-
-    let enum_name = &subject.ident;
-    quote::quote!(
-        #subject
-
-        impl std::string::ToString for #enum_name {
-            fn to_string(&self) -> String {
-                match self {
-                    #matching_arms
-                    _ => #has_default
-                }
-            }
-        }
-    )
-    .to_token_stream()
-    .into()
+    services::to_string_expand(input)
 }
 
 /// Use this to express how `Display` should be implemented through variants descriminant.
@@ -180,44 +112,7 @@ pub fn to_string(_: TokenStream, input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn fmt(_: TokenStream, input: TokenStream) -> TokenStream {
-    let mut subject = parse_macro_input!(input as Subject);
-
-    let matching_arms: proc_macro2::TokenStream =
-        variants_to_arms(subject.get_variants().iter(), |expr| {
-            quote::quote!(write!(f, #expr))
-        });
-
-    let mut has_default = quote::quote!(write!(f, "{}", "".to_string())).to_token_stream();
-    subject.data.variants = subject
-        .data
-        .variants
-        .into_iter()
-        .filter_map(|mut variant| {
-            if variant.discriminant.is_some() && variant.ident == "__Default__" {
-                let (_, expr) = variant.discriminant.as_ref().unwrap();
-                has_default = quote::quote!(#expr);
-                return None;
-            }
-            variant.discriminant = None;
-            Some(variant)
-        })
-        .collect();
-
-    let enum_name = &subject.ident;
-    quote::quote!(
-        #subject
-
-        impl std::fmt::Display for #enum_name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                match self {
-                    #matching_arms
-                    _ => #has_default
-                }
-            }
-        }
-    )
-    .to_token_stream()
-    .into()
+    services::fmt_expand(input)
 }
 
 /// Use this to express how `Into<T>` should be implemented through variants descriminant.
@@ -238,43 +133,49 @@ pub fn fmt(_: TokenStream, input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn into(attr: TokenStream, input: TokenStream) -> TokenStream {
-    let ty = parse_macro_input!(attr as Type);
-    let mut subject = parse_macro_input!(input as Subject);
+    services::into_expand(attr, input)
+}
 
-    let matching_arms: proc_macro2::TokenStream =
-        variants_to_arms(subject.get_variants().iter(), |expr| quote::quote!(#expr));
+/// Use this to express how `Deref<Target = T>` should be implemented through variants descriminant.
+///
+/// # Example
+///
+/// ```rust
+/// #[penum::deref(str)]
+/// enum EnumVariants {
+///     Variant0 = "Return on match",
+///     Variant1 = { "Evaluated" },
+///     Variant2 = concat!(i32, hello),
+///     Variant3(&'static str) = f0,
+///     Variant4 = &EnumVariants::Variant0,
+/// }
+/// let enum_variants = Enum::Variant0;
+/// println!("{}", &*enum_variants);
+/// ```
+#[proc_macro_attribute]
+pub fn deref(attr: TokenStream, input: TokenStream) -> TokenStream {
+    services::deref_expand(attr, input, None)
+}
 
-    let mut has_default = quote::quote!(Default::default()).to_token_stream();
-    subject.data.variants = subject
-        .data
-        .variants
-        .into_iter()
-        .filter_map(|mut variant| {
-            if variant.discriminant.is_some() && variant.ident == "__Default__" {
-                let (_, expr) = variant.discriminant.as_ref().unwrap();
-                has_default = quote::quote!(#expr);
-                return None;
-            }
-
-            variant.discriminant = None;
-            Some(variant)
-        })
-        .collect();
-
-    let enum_name = &subject.ident;
-
-    quote::quote!(
-        #subject
-
-        impl Into<#ty> for #enum_name {
-            fn into(self) -> #ty {
-                match self {
-                    #matching_arms
-                    _ => #has_default
-                }
-            }
-        }
-    )
-    .to_token_stream()
-    .into()
+/// Use this to express that you want the enum to implement `deref() -> &str`, `as_str()` and `as_ref()`;
+///
+/// # Example
+///
+/// ```rust
+/// #[penum::static_str]
+/// enum EnumVariants {
+///     Variant0 = "Return on match",
+///     Variant1 = { "Evaluated" },
+///     Variant2 = concat!(i32, hello),
+///     Variant3(&'static str) = { f0 },
+///     Variant4 = &EnumVariants::Variant0,
+/// }
+/// let enum_variants = Enum::Variant0;
+/// assert_eq!("Return on match", &enum_variants);
+/// assert_eq!("Return on match", enum_variants.as_str());
+/// assert_eq!("Return on match", enum_variants.as_ref());
+/// ```
+#[proc_macro_attribute]
+pub fn static_str(_: TokenStream, input: TokenStream) -> TokenStream {
+    services::static_str(input)
 }
