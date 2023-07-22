@@ -25,7 +25,8 @@ use crate::{
     penum::{Stringify, TraitBoundUtils},
 };
 
-pub const DEFAULT_VARIANT_NAME: &str = "default";
+pub const DEFAULT_VARIANT_SYMBOL: &str = "default";
+pub const ABSTRACT_MACRO_EXPR_SYMBOL: &str = "implement";
 
 pub struct Static<T, F = fn() -> T>(UnsafeCell<Option<T>>, Once, F);
 
@@ -166,66 +167,6 @@ pub fn create_unique_ident(value: &str, tag: &Ident, span: Span) -> Ident {
     format_ident!("_{}_{}", tag, value, span = span)
 }
 
-/// I just wanted to add this quickly and try it out, so I need to refactor this once I'm done testing.
-pub fn variants_to_arms<'a>(
-    variants: impl Iterator<Item = &'a Variant>,
-    wapper: impl Fn(&'a Expr) -> proc_macro2::TokenStream,
-) -> proc_macro2::TokenStream {
-    variants
-        .filter_map(|variant| {
-            variant.discriminant.as_ref()?;
-            let name = &variant.ident;
-
-            if name.get_string().contains(DEFAULT_VARIANT_NAME) {
-                return None;
-            }
-
-            let (_, expr) = variant.discriminant.as_ref().unwrap();
-
-            let expr_toks = match expr {
-                syn::Expr::Lit(_) => wapper(expr),
-                _ => expr.to_token_stream(),
-            };
-
-            let arm = match &variant.fields {
-                Fields::Named(named) => {
-                    let fields = named.named.iter().enumerate().map(|(_, f)| {
-                        let name = f.ident.as_ref();
-                        quote::quote!(#name)
-                    });
-
-                    let tokens: proc_macro2::TokenStream =
-                        itertools::intersperse(fields, quote::quote!(,)).collect();
-
-                    quote::quote!(
-                        Self::#name { #tokens } => { #expr_toks },
-                    )
-                }
-                Fields::Unnamed(tup) => {
-                    let fields = tup
-                        .unnamed
-                        .iter()
-                        .enumerate()
-                        .map(|(i, _)| format_ident!("f{i}").to_token_stream());
-
-                    let tokens: proc_macro2::TokenStream =
-                        itertools::intersperse(fields, quote::quote!(,)).collect();
-
-                    quote::quote!(
-                        Self::#name ( #tokens ) => { #expr_toks },
-                    )
-                }
-                Fields::Unit => {
-                    quote::quote!(
-                            Self::#name => { #expr_toks },
-                    )
-                }
-            };
-            Some(arm)
-        })
-        .collect()
-}
-
 pub fn create_impl_string<'a>(
     bounds: &'a Punctuated<TypeParamBound, Add>,
     error: &'a mut Diagnostic,
@@ -252,46 +193,6 @@ pub fn create_impl_string<'a>(
     } else {
         Some(impl_string)
     }
-}
-
-pub fn censor_discriminants_get_default(
-    mut subject: Subject,
-    default_else: Option<proc_macro2::TokenStream>,
-) -> (Subject, proc_macro2::TokenStream) {
-    let mut has_default = None;
-    subject.data.variants = subject
-        .data
-        .variants
-        .into_iter()
-        .filter_map(|mut variant| {
-            if variant.discriminant.is_some() && variant.ident == DEFAULT_VARIANT_NAME {
-                println!("got here");
-                let (_, expr) = variant.discriminant.as_ref().unwrap();
-                // This is a bad idea.. But I'm to lazy to change this implementation.
-                // Note that we are assuming that when `default_else` is None, we are in a
-                // `to_string` context, and because we are handling `default` we want to wrap this
-                // in a `format!()`. So given a `default = "hello from enum"`, we want it to end up
-                // being `default = format!("hello from enum")` implicitly.
-                has_default = Some(if default_else.is_none() {
-                    quote::quote!(format!(#expr))
-                } else {
-                    quote::quote!(#expr)
-                });
-                return None;
-            }
-
-            variant.discriminant = None;
-            Some(variant)
-        })
-        .collect();
-
-    (
-        subject,
-        has_default
-            .or(default_else)
-            .or_else(|| Some(quote::quote!("".to_string())))
-            .unwrap(),
-    )
 }
 
 #[cfg(test)]

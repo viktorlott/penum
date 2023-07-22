@@ -9,8 +9,6 @@ use crate::factory::PenumExpr;
 use crate::factory::Subject;
 use crate::penum::Penum;
 use crate::penum::Stringify;
-use crate::utils::censor_discriminants_get_default;
-use crate::utils::variants_to_arms;
 
 pub fn penum_expand(attr: TokenStream, input: TokenStream) -> TokenStream {
     // TODO: Make it bi-directional, meaning it's also possible to register enums and then do
@@ -37,13 +35,8 @@ pub fn penum_expand(attr: TokenStream, input: TokenStream) -> TokenStream {
 
 pub fn to_string_expand(input: TokenStream) -> TokenStream {
     let subject = parse_macro_input!(input as Subject);
-
-    let matching_arms = variants_to_arms(subject.get_variants().iter(), |expr| {
-        quote::quote!(format!(#expr))
-    });
-
-    let (subject, has_default) = censor_discriminants_get_default(subject, None);
-
+    let matching_arms = subject.variants_to_arms(|expr| quote::quote!(format!(#expr)));
+    let (subject, has_default) = subject.get_censored_subject_and_default_arm(None);
     let enum_name = &subject.ident;
 
     quote::quote!(
@@ -64,16 +57,9 @@ pub fn to_string_expand(input: TokenStream) -> TokenStream {
 
 pub fn fmt_expand(input: TokenStream) -> TokenStream {
     let subject = parse_macro_input!(input as Subject);
-
-    let matching_arms = variants_to_arms(subject.get_variants().iter(), |expr| {
-        quote::quote!(write!(f, #expr))
-    });
-
-    let (subject, has_default) = censor_discriminants_get_default(
-        subject,
-        Some(quote::quote!(write!(f, "{}", "".to_string()))),
-    );
-
+    let matching_arms = subject.variants_to_arms(|expr| quote::quote!(write!(f, #expr)));
+    let (subject, has_default) = subject
+        .get_censored_subject_and_default_arm(Some(quote::quote!(write!(f, "{}", "".to_string()))));
     let enum_name = &subject.ident;
 
     quote::quote!(
@@ -95,13 +81,9 @@ pub fn fmt_expand(input: TokenStream) -> TokenStream {
 pub fn into_expand(attr: TokenStream, input: TokenStream) -> TokenStream {
     let ty = parse_macro_input!(attr as Type);
     let subject = parse_macro_input!(input as Subject);
-
-    let matching_arms =
-        variants_to_arms(subject.get_variants().iter(), |expr| quote::quote!(#expr));
-
+    let matching_arms = subject.variants_to_arms(|expr| quote::quote!(#expr));
     let (subject, has_default) =
-        censor_discriminants_get_default(subject, Some(quote::quote!(Default::default())));
-
+        subject.get_censored_subject_and_default_arm(Some(quote::quote!(Default::default())));
     let enum_name = &subject.ident;
 
     quote::quote!(
@@ -127,13 +109,9 @@ pub fn deref_expand(
 ) -> TokenStream {
     let ty = parse_macro_input!(attr as Type);
     let subject = parse_macro_input!(input as Subject);
-
-    let matching_arms =
-        variants_to_arms(subject.get_variants().iter(), |expr| quote::quote!(#expr));
-
+    let matching_arms = subject.variants_to_arms(|expr| quote::quote!(#expr));
     let (subject, has_default) =
-        censor_discriminants_get_default(subject, Some(quote::quote!(Default::default())));
-
+        subject.get_censored_subject_and_default_arm(Some(quote::quote!(Default::default())));
     let enum_name = &subject.ident;
     let extensions = extend.map(|extend| extend(&subject));
 

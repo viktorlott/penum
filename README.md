@@ -98,6 +98,8 @@ Add one of the following to your enum to enable enum descriminant expressions.
 Make sure to also try out `penum::penum` if you like this `feature`. Note that not interoperable
 with `penum::penum`, and should be used separatly, because they are mutually exclusive. 
 
+Note that `penum::penum` might be changed into `penum::expr`, `penum::declare` or `pemum::express`.
+
 ------------------------------------------------------------------
 
 ## Overview 
@@ -130,6 +132,7 @@ Note that in a penum impl for expression, no `^` is needed.
 ```rust
 #[penum( impl Trait for Type )]
 ```
+
 In Rust 1.68.0, `From<bool>` for `{f32,f64}` has stabilized. 
 That means you can do this.
 ```rust
@@ -312,6 +315,7 @@ impl AsInner<i32> for Foo {
 
 
 ### Future ideas that might be useful
+#### NOT SUPPORTED YET - WIP
 
 The thing is, most of the time, you'd most likely want implement things the normal way, but when you
 have a very tiny implementation planned, this might be good enough.
