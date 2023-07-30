@@ -51,7 +51,8 @@ $ cargo add penum
 
 ## Latest feature
 
-You can now use enum `discriminants` as expression blocks for `ToString`, `Display`, `Into<T>` and `Deref<Target = T>`.
+Expressions for enum discriminats are syntactically allowed, but is rejected at a semantic level.
+So this feature unlocks this semantic lock for the developer such that `discriminants` can be writting as expression blocks. The current supported attributed proc macros are `ToString`, `Display`, `Into<T>` and `Deref<Target = T>`.
 This could be useful as an alternative to const declarations, and also, to avoid inner attributes.
 
 ```rust
