@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
 use std::ops::Deref;
@@ -153,7 +152,7 @@ impl<'bound> Blueprint<'bound> {
                 // It's not possible to do `&Default::default()` or
                 // `&T::default()` IIRC. A &T where T isn't owned by
                 // self needs to be ZST to be able to be returned.
-                let default_return = match signature.output.borrow() {
+                let default_return = match &signature.output {
                     syn::ReturnType::Default => quote::quote!(()),
                     syn::ReturnType::Type(_, ty) => {
                         return_default_ret_type(ty).unwrap_or_else(return_panic)
@@ -213,13 +212,16 @@ impl<'bound> Blueprint<'bound> {
                     let ident = &matc.ident;
                     let generics = &matc.generics;
 
-                    matc.default = Some((token::Eq(Span::call_site()), parse_quote!(
-                        <#ty as #bound>::#ident #generics
-                    )));
+                    matc.default = Some((
+                        token::Eq(Span::call_site()),
+                        parse_quote!(
+                            <#ty as #bound>::#ident #generics
+                        ),
+                    ));
                 }
             }
 
-            return Some(types)
+            return Some(types);
         };
 
         let mut bindings = bindings.peekable();
@@ -247,9 +249,10 @@ impl<'bound> Blueprint<'bound> {
             Some(types)
         } else {
             for binding in bindings {
-                let Some(matc) = types.iter_mut()
-                    .find_map(|assoc| assoc.ident.eq(&binding.ident)
-                    .then_some(assoc)) else {
+                let Some(matc) = types
+                    .iter_mut()
+                    .find_map(|assoc| assoc.ident.eq(&binding.ident).then_some(assoc))
+                else {
                     panic!("Missing associated trait bindings")
                 };
 
@@ -269,7 +272,7 @@ impl<'bound> Blueprint<'bound> {
 
         for item in self.schematic.items.iter() {
             let TraitItem::Method(method) = item else {
-                continue
+                continue;
             };
 
             // FIXME: FILTER RECEIVER METHODS.
@@ -312,7 +315,7 @@ impl<'bound> Blueprint<'bound> {
     fn get_bound_bindings(&self) -> Option<impl Iterator<Item = &Binding>> {
         if let Type::Path(path) = &self.bound.ty {
             let path_segment = path.path.segments.last().unwrap();
-            match path_segment.arguments.borrow() {
+            match &path_segment.arguments {
                 syn::PathArguments::AngleBracketed(angle) => {
                     // NOTE: This can cause us to still return as if we have bindings even though we
                     // might be returning an empty iterator.
@@ -343,7 +346,7 @@ impl<'bound> Blueprint<'bound> {
     fn get_bound_generics(&self) -> Option<impl Iterator<Item = &Type>> {
         if let Type::Path(path) = &self.bound.ty {
             let path_segment = path.path.segments.last().unwrap();
-            match path_segment.arguments.borrow() {
+            match &path_segment.arguments {
                 syn::PathArguments::AngleBracketed(angle) => {
                     Some(angle.args.iter().filter_map(|arg| match arg {
                         syn::GenericArgument::Type(ty) => Some(ty),
@@ -511,7 +514,7 @@ impl<'bound> Deref for BlueprintsMap<'bound> {
     type Target = BTreeMap<UniqueHashId<Type>, Vec<Blueprint<'bound>>>;
 
     fn deref(&self) -> &Self::Target {
-        self.0.borrow()
+        &self.0
     }
 }
 
@@ -565,7 +568,7 @@ impl VisitMut for RemoveBoundBindings {
         // Ugh, refactor this
         loop {
             let (Some(gen), s) = (args.next(), args.peek()) else {
-                break
+                break;
             };
 
             if !matches!(gen, GenericArgument::Binding(_)) {

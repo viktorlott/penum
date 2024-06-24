@@ -15,14 +15,18 @@ use syn::{
     parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    token::{self},
-    Expr, Fields, Token, TraitBound, Type, Variant, WhereClause,
+    token::{self, Add},
+    Expr, Fields, Token, TraitBound, Type, TypeParamBound, Variant, WhereClause,
 };
 
 use crate::{
-    factory::{PatComposite, PatFrag},
-    penum::Stringify,
+    error::Diagnostic,
+    factory::{PatComposite, PatFrag, Subject},
+    penum::{Stringify, TraitBoundUtils},
 };
+
+pub const DEFAULT_VARIANT_SYMBOL: &str = "default";
+pub const ABSTRACT_MACRO_EXPR_SYMBOL: &str = "implement";
 
 pub struct Static<T, F = fn() -> T>(UnsafeCell<Option<T>>, Once, F);
 
@@ -163,59 +167,33 @@ pub fn create_unique_ident(value: &str, tag: &Ident, span: Span) -> Ident {
     format_ident!("_{}_{}", tag, value, span = span)
 }
 
-/// I just wanted to add this quickly and try it out, so I need to refactor this once I'm done testing.
-pub fn variants_to_arms<'a>(
-    variants: impl Iterator<Item = &'a Variant>,
-    wapper: impl Fn(&'a Expr) -> proc_macro2::TokenStream,
-) -> proc_macro2::TokenStream {
-    variants
-        .filter_map(|variant| {
-            variant.discriminant.as_ref()?;
-            let name = &variant.ident;
-            let (_, expr) = variant.discriminant.as_ref().unwrap();
+pub fn create_impl_string<'a>(
+    bounds: &'a Punctuated<TypeParamBound, Add>,
+    error: &'a mut Diagnostic,
+) -> Option<String> {
+    // TODO: If we have an error, should we just return?
+    let mut impl_string = String::new();
 
-            let expr_toks = match expr {
-                syn::Expr::Lit(_) => wapper(expr),
-                _ => expr.to_token_stream(),
-            };
-
-            let arm = match &variant.fields {
-                Fields::Named(named) => {
-                    let fields = named.named.iter().enumerate().map(|(_, f)| {
-                        let name = f.ident.as_ref();
-                        quote::quote!(#name)
-                    });
-
-                    let tokens: proc_macro2::TokenStream =
-                        itertools::intersperse(fields, quote::quote!(,)).collect();
-
-                    quote::quote!(
-                        Self::#name { #tokens } => { #expr_toks },
-                    )
+    for bound in bounds.iter() {
+        match bound {
+            syn::TypeParamBound::Trait(trait_bound) => {
+                if let syn::TraitBoundModifier::None = trait_bound.modifier {
+                    impl_string.push_str(&trait_bound.get_unique_trait_bound_id())
+                } else {
+                    error.extend(bound.span(), maybe_bounds_not_permitted(trait_bound));
                 }
-                Fields::Unnamed(tup) => {
-                    let fields = tup
-                        .unnamed
-                        .iter()
-                        .enumerate()
-                        .map(|(i, _)| format_ident!("f{i}").to_token_stream());
+            }
+            syn::TypeParamBound::Lifetime(_) => {
+                error.extend_spanned(bound, lifetime_not_permitted());
+            }
+        }
+    }
 
-                    let tokens: proc_macro2::TokenStream =
-                        itertools::intersperse(fields, quote::quote!(,)).collect();
-
-                    quote::quote!(
-                        Self::#name ( #tokens ) => { #expr_toks },
-                    )
-                }
-                Fields::Unit => {
-                    quote::quote!(
-                            Self::#name => { #expr_toks },
-                    )
-                }
-            };
-            Some(arm)
-        })
-        .collect()
+    if error.has_error() || impl_string.is_empty() {
+        None
+    } else {
+        Some(impl_string)
+    }
 }
 
 #[cfg(test)]
@@ -238,50 +216,3 @@ mod tests {
         assert_eq!("_2029180714094036370", ty_string2);
     }
 }
-
-// #[derive(Hash, Debug)]
-// pub struct Hashable<'id, T: Hash>(pub &'id T);
-
-// impl<T: Hash + ToTokens> Eq for Hashable<'_, T> {}
-
-// impl<T: Hash + ToTokens> Ord for Hashable<'_, T> {
-//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-//         self.0.to_token_stream().to_string().cmp(&other.0.to_token_stream().to_string())
-//     }
-// }
-
-// impl<T: Hash + ToTokens> PartialEq for Hashable<'_, T> {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.0.to_token_stream().to_string() == other.0.to_token_stream().to_string()
-//     }
-// }
-
-// impl<T: Hash + ToTokens> PartialOrd for Hashable<'_, T> {
-//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-//         self.0.to_token_stream().to_string()
-//             .partial_cmp(&other.0.to_token_stream().to_string())
-//     }
-// }
-
-// #[derive(Default, Debug)]
-// pub struct PolyMap<'id, T: Hash>(BTreeMap<Hashable<'id, T>, BTreeSet<Hashable<'id, T>>>);
-
-// /// Fix these later
-// impl<'id, T: Hash + ToTokens> PolyMap<'id, T> {
-//     pub fn polymap_insert(&'id mut self, pty: &'id T, ity: &'id T) {
-//         let pty = Hashable(pty);
-//         let ity = Hashable(ity);
-
-//         if let Some(set) = self.0.get_mut(&pty) {
-//             set.insert(ity);
-//         } else {
-//             self.0.insert(pty, vec![ity].into_iter().collect());
-//         }
-//     }
-// }
-
-// fn tester() {
-//     let mut pol = PolyMap::default();
-
-//     pol.polymap_insert(pty, ity)
-// }

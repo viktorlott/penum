@@ -42,7 +42,7 @@ This crate is available on [crates.io](https://crates.io/crates/penum)
 and can be used by adding the following to your project's Cargo.toml:
 ```toml
 [dependencies]
-penum = "0.1.27"
+penum = "0.1.29"
 ```
 Or run this command in your cargo project:
 ```sh
@@ -51,7 +51,9 @@ $ cargo add penum
 
 ## Latest feature
 
-You can now use enum `descriminants` as expression blocks for `ToString`, `Display` and `Into<T>`.
+Expressions for enum discriminats are syntactically allowed, but is rejected at a semantic level.
+So this feature unlocks this semantic lock for the developer such that `discriminants` can be writting as expression blocks. The current supported attributed proc macros are `ToString`, `Display`, `Into<T>` and `Deref<Target = T>`.
+This could be useful as an alternative to const declarations, and also, to avoid inner attributes.
 
 ```rust
 #[penum::to_string]
@@ -61,21 +63,43 @@ enum EnumVariants {
     Variant2(i32, u32)          = stringify!(f0, f1).to_string(),
     Variant3 { name: String }   = format!("My string {name}"),
     Variant4 { age: u32 }       = age.to_string(),
-    Variant5 { list: Vec<u32> } = {
+    Variant5                    = EnumVariants::Variant0.to_string(),
+    Variant6 { list: Vec<u32> } = {
         let string = list
             .iter()
             .map(ToString::to_string)
-            .join(", ");
+            .collect::<String>();
 
         format!("List: ({string})")
     },
+    Variant7,
+    Variant8,
+
+    // Note that default will not appear in the Enum, i.e `EnumVariants::default` will not exist. 
+    // Also, we might change this in the future, e.g. using `fallback` instead?
+    default                     = "Variant7 and Variant8 will return this default"
 }
 
 let enum_variants = Enum::Variant0;
 println!("{}", enum_variants.to_string());
 ```
 
-Add the attribute `#[penum::to_string]` or `#[penum::fmt]` to replace strict enum descriminant.
+Add one of the following to your enum to enable enum descriminant expressions.
+- `penum::to_string` — Useful when you only want to implement `ToString`.
+
+- `penum::fmt` — Useful when you want to implement `ToString` and `Display`.
+
+- `penum::into(T)` — Useful when you want to convert your variant `Into<T>`.
+
+- `penum::deref(T)` — Useful when you want to utilize Rust auto dereferencer.
+
+- `penum::static_str` — Will implement `Deref<Str>` and `AsRef<str>`, including helper methods
+  like: `.as_str()` and `.static_str()`.
+
+Make sure to also try out `penum::penum` if you like this `feature`. Note that not interoperable
+with `penum::penum`, and should be used separatly, because they are mutually exclusive. 
+
+Note that `penum::penum` might be changed into `penum::expr`, `penum::declare` or `pemum::express`.
 
 ------------------------------------------------------------------
 
@@ -100,9 +124,6 @@ A `Penum` expression without specifying a pattern:
 ```
 *Shorthand syntax for `_ where Type: ^Trait`*
 
-<details>
-<summary>More details</summary>
-
 Important to include `^` for traits that you want to dispatch.
 ```rust
 #[penum( impl Type: ^Trait )]
@@ -112,13 +133,12 @@ Note that in a penum impl for expression, no `^` is needed.
 ```rust
 #[penum( impl Trait for Type )]
 ```
+
 In Rust 1.68.0, `From<bool>` for `{f32,f64}` has stabilized. 
 That means you can do this.
 ```rust
 #[penum( impl From<bool> for {f32,f64} )]
 ```
-
-</details>
 
 <br />
 
@@ -295,6 +315,99 @@ impl AsInner<i32> for Foo {
 
 
 
+### Future ideas that might be useful
+#### NOT SUPPORTED YET - WIP
+
+The thing is, most of the time, you'd most likely want implement things the normal way, but when you
+have a very tiny implementation planned, this might be good enough.
+```rust
+#[penum]
+enum Enum {
+    Variant0(String) = implement! {
+        ToString            => "My incoming string: {f0}",
+        Deref[Target = str] => &**f0,
+        AsRef[str]          => f0,
+    },
+    default = {
+        ToString => "My custom fallback string",
+        _ => Default::default()
+    }
+}
+```
+
+```rust
+#[penum]
+enum Enum {
+    Variant0(String) = implement! {
+        ToString            => "My incoming string: {f0}",
+    },
+    Variant1(&'static str, i32) = implement! {
+        ToString            => "My incoming string: {f0}",
+    },
+    default = {
+        ToString => "My custom fallback string",
+        _ => Default::default()
+    }
+}
+```
+
+```rust
+#[penum]
+enum Enum {
+    Variant0(String) = implement! {
+        ToString { 
+            format!("My incoming string: {f0}") 
+        },
+        Deref<Target = str> { 
+            &**f0 
+        },
+        AsRef<str> { f0 },
+    },
+    default = implement! {
+        ToString { "My custom fallback string" },
+        _ { Default::default() }
+    }
+}
+```
+
+
+```rust
+#[penum]
+enum Enum {
+    Variant0(String) = implement! {
+        ToString => { 
+            format!("My incoming string: {f0}") 
+        },
+        Deref<Target = str> => { 
+            &**f0 
+        },
+        AsRef<str> => { f0 },
+    },
+    default = implement! {
+        ToString { "My custom fallback string" },
+        _ { Default::default() }
+    }
+}
+```
+
+```rust
+#[penum]
+enum Enum {
+    Variant0(String) = implement! {
+        ToString => { 
+            format!("My incoming string: {f0}") 
+        },
+        Deref<Target = str> => { 
+            &**f0 
+        },
+        AsRef<str> => { f0 },
+    },
+    default = implement! {
+        ToString => { "My custom fallback string" },
+        _  => { Default::default() }
+    }
+}
+```
 
   <!-- ,
   e.g. `(T) where T: ^AsRef<str>`. The dispatcher is smart enough to

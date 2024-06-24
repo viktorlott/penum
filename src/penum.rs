@@ -7,13 +7,11 @@ use quote::format_ident;
 use quote::ToTokens;
 
 use syn::punctuated::Punctuated;
-use syn::token::Add;
 use syn::token::Comma;
 use syn::Ident;
 use syn::ItemImpl;
 use syn::TraitBound;
 use syn::TypeImplTrait;
-use syn::TypeParamBound;
 
 use syn::parse_quote;
 use syn::spanned::Spanned;
@@ -27,14 +25,13 @@ use crate::factory::WherePredicate;
 use crate::dispatch::VariantSig;
 use crate::error::Diagnostic;
 
+use crate::utils::create_impl_string;
 use crate::utils::create_unique_ident;
-use crate::utils::lifetime_not_permitted;
-use crate::utils::maybe_bounds_not_permitted;
 use crate::utils::no_match_found;
 use crate::utils::PolymorphicMap;
 use crate::utils::UniqueHashId;
 
-pub struct Disassembled;
+pub struct Unassembled;
 pub struct Assembled;
 
 type PolyMap = PolymorphicMap<UniqueHashId<Type>, UniqueHashId<Type>>;
@@ -43,20 +40,34 @@ type PolyMap = PolymorphicMap<UniqueHashId<Type>, UniqueHashId<Type>>;
 ///
 /// It contains everything we need to construct our dispatcher and
 /// pattern validator.
-pub struct Penum<State = Disassembled> {
+pub struct Penum<State = Unassembled> {
+    /// A Penum expression consists of one or more patterns, and an optional WhereClause.
     expr: PenumExpr,
+
+    /// The enum (or ADT in the future) that we will read and specialize.
     subject: Subject,
+
+    /// A simple macro diagnostic struct that we use to append compiler errors with span information.
     error: Diagnostic,
+
+    /// I use this to map generics to concrete types that I then can use during substitution stage.
     types: PolyMap,
+
+    /// Contains all the impls that we've managed to construct.
     impls: Vec<ItemImpl>,
+
+    /// Only used as a DX marker that seperates methods between Disassembled <> Assembled.
     _marker: PhantomData<State>,
 }
 
-impl Penum<Disassembled> {
-    pub fn from(expr: PenumExpr, subject: Subject) -> Self {
+impl Penum<Unassembled> {
+    pub fn new(expr: PenumExpr, subject: Subject) -> Self {
         Self {
             expr,
             subject,
+            // It's kind of annoying that I have to impl `Default` for `expr` and `subject` for the
+            // spread operator to work `..Default::default()`
+            // NOTE: I could extract these fields into another struct.
             error: Default::default(),
             types: Default::default(),
             impls: Default::default(),
@@ -142,11 +153,17 @@ impl Penum<Disassembled> {
                 let Some(matched_pair) = comparable_pats.compare(&comp_item) else {
                     let (span, message) = eor!(
                         comp_item.inner.is_empty(),
-                            (variant_ident.span(), no_match_found(variant_ident, &pattern_fmt)),
-                            (comp_item.inner.span(), no_match_found(comp_item.inner, &pattern_fmt))
-                        );
+                        (
+                            variant_ident.span(),
+                            no_match_found(variant_ident, &pattern_fmt)
+                        ),
+                        (
+                            comp_item.inner.span(),
+                            no_match_found(comp_item.inner, &pattern_fmt)
+                        )
+                    );
                     self.error.extend(span, message);
-                    continue
+                    continue;
                 };
 
                 // No support for empty unit iter, yet...
@@ -163,23 +180,16 @@ impl Penum<Disassembled> {
                     let item_ty_unique = field_item.ty.get_unique_id();
 
                     if param_pattern.is_infer() {
-                        if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                            let variant_sig = VariantSig::new(
-                                enum_ident,
-                                variant_ident,
-                                field_item,
-                                field_index,
-                                arity,
-                            );
-
-                            blueprints.find_and_attach(
-                                &item_ty_unique,
-                                &variant_sig,
-                                Some(&item_ty_unique),
-                            );
-                        }
-                        self.types
-                            .polymap_insert(item_ty_unique.clone(), item_ty_unique);
+                        handle_inferred_pat(
+                            &mut self.types,
+                            &mut maybe_blueprint_map,
+                            enum_ident,
+                            variant_ident,
+                            field_item,
+                            field_index,
+                            arity,
+                            item_ty_unique,
+                        );
 
                         continue;
                     }
@@ -354,47 +364,57 @@ impl Penum<Disassembled> {
     }
 }
 
+#[inline(always)]
+fn handle_inferred_pat(
+    types: &mut PolymorphicMap<UniqueHashId<Type>, UniqueHashId<Type>>,
+    maybe_blueprint_map: &mut Option<crate::dispatch::BlueprintsMap<'_>>,
+    enum_ident: &Ident,
+    variant_ident: &Ident,
+    field_item: &syn::Field,
+    field_index: usize,
+    arity: usize,
+    item_ty_unique: UniqueHashId<Type>,
+) {
+    if let Some(blueprints) = maybe_blueprint_map.as_mut() {
+        let variant_sig =
+            VariantSig::new(enum_ident, variant_ident, field_item, field_index, arity);
+
+        blueprints.find_and_attach(&item_ty_unique, &variant_sig, Some(&item_ty_unique));
+    }
+    types.polymap_insert(item_ty_unique.clone(), item_ty_unique);
+}
+
 impl Penum<Assembled> {
     // NOTE: This is only used for unit tests
     #[allow(dead_code)]
-    pub fn get_tokenstream(mut self) -> TokenStream2 {
-        self.attach_assertions();
-        if self.error.has_error() {
-            self.error.map(Error::to_compile_error).unwrap()
+    pub fn get_tokenstream(self) -> TokenStream2 {
+        let (subject, impls, diagnostic) = self.attach_assertions();
+
+        if diagnostic.has_error() {
+            diagnostic.map(Error::to_compile_error).unwrap()
         } else {
-            let enum_item = self.subject;
-            let impl_items = self.impls;
-
-            let output = quote::quote!(#enum_item #(#impl_items)*);
-
-            output
+            quote::quote!(#subject #(#impls)*)
         }
     }
 
-    pub fn unwrap_or_error(mut self) -> TokenStream {
-        self.attach_assertions();
+    pub fn unwrap_or_error(self) -> TokenStream {
+        let (subject, impls, diagnostic) = self.attach_assertions();
 
-        self.error
+        diagnostic
             .map(Error::to_compile_error)
-            .unwrap_or_else(|| {
-                let enum_item = self.subject;
-                let impl_items = self.impls;
-                let output = quote::quote!(#enum_item #(#impl_items)*);
-
-                output
-            })
+            .unwrap_or_else(|| quote::quote!(#subject #(#impls)*))
             .into()
     }
 
-    pub(self) fn attach_assertions(&mut self) {
+    pub(self) fn attach_assertions(mut self) -> (Subject, Vec<ItemImpl>, Diagnostic) {
         if let Some(where_cl) = self.expr.clause.as_ref() {
-            for (_, predicate) in where_cl.predicates.iter().enumerate() {
+            for predicate in where_cl.predicates.iter() {
                 match predicate {
                     WherePredicate::Type(pred) => {
                         let id = pred.bounded_ty.get_unique_id();
 
                         if let Some(pty_set) = self.types.get(&id) {
-                            for (_, ty_id) in pty_set.iter().enumerate() {
+                            for ty_id in pty_set.iter() {
                                 let ty = &**ty_id;
 
                                 // Could remove this.
@@ -426,9 +446,12 @@ impl Penum<Assembled> {
                 }
             }
         }
+
+        (self.subject, self.impls, self.error)
     }
 }
 
+// NOTE: I will eventually clean this mess up
 pub trait Stringify: ToTokens {
     fn get_string(&self) -> String {
         self.to_token_stream().to_string()
@@ -488,36 +511,9 @@ impl TypeUtils for Type {
 }
 
 impl TraitBoundUtils for TraitBound {
+    /// We use this when we want to create an "impl" string. It's
     fn get_unique_trait_bound_id(&self) -> String {
         UniqueHashId(self).get_unique_string()
-    }
-}
-
-fn create_impl_string<'a>(
-    bounds: &'a Punctuated<TypeParamBound, Add>,
-    error: &'a mut Diagnostic,
-) -> Option<String> {
-    let mut impl_string = String::new();
-
-    for bound in bounds.iter() {
-        match bound {
-            syn::TypeParamBound::Trait(trait_bound) => {
-                if let syn::TraitBoundModifier::None = trait_bound.modifier {
-                    impl_string.push_str(&trait_bound.get_unique_trait_bound_id())
-                } else {
-                    error.extend(bound.span(), maybe_bounds_not_permitted(trait_bound));
-                }
-            }
-            syn::TypeParamBound::Lifetime(_) => {
-                error.extend_spanned(bound, lifetime_not_permitted());
-            }
-        }
-    }
-
-    if error.has_error() || impl_string.is_empty() {
-        None
-    } else {
-        Some(impl_string)
     }
 }
 
@@ -548,7 +544,7 @@ mod tests {
         let pattern: PenumExpr = parse_quote!( #attr );
         let input: Subject = parse_quote!( #input );
 
-        let penum = Penum::from(pattern, input)
+        let penum = Penum::new(pattern, input)
             .assemble()
             .get_tokenstream()
             .to_string();

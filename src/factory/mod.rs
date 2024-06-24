@@ -24,7 +24,8 @@ pub struct ComparablePair<'disc>(
 /// We use this to represent either a `Pattern` or an `Item` that can be compared with eachother.
 ///
 /// If we want to compare other things in the future, we extend this struct.
-/// I have marked it as non_exhaustive even though that won't do anything.
+/// I have marked it as non_exhaustive even though that won't do anything--because we're not
+/// exposing it to other crates.
 #[non_exhaustive]
 pub struct Comparable<'disc, T> {
     /// To identify the discriminant of the composite type
