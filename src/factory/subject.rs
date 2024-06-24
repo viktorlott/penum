@@ -156,7 +156,21 @@ impl Subject {
         for variant in self.get_variants() {
             let name = &variant.ident;
 
-            let Some((_, Expr::Macro(ExprMacro {mac: Macro { path, tokens: mac_tokens, ..}, ..} ))) = variant.discriminant.as_ref() else {continue};
+            let Some((
+                _,
+                Expr::Macro(ExprMacro {
+                    mac:
+                        Macro {
+                            path,
+                            tokens: mac_tokens,
+                            ..
+                        },
+                    ..
+                }),
+            )) = variant.discriminant.as_ref()
+            else {
+                continue;
+            };
 
             if !path.get_string().contains(ABSTRACT_MACRO_EXPR_SYMBOL) {
                 continue;

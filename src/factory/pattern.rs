@@ -170,7 +170,7 @@ impl PenumExpr {
     /// same trait bounds are combined.
     pub fn get_blueprints_map(&self, error: &mut Diagnostic) -> Option<BlueprintsMap> {
         let Some(clause) = self.clause.as_ref() else {
-            return None
+            return None;
         };
 
         let mut polymap = BlueprintsMap::default();

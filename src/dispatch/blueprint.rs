@@ -212,13 +212,16 @@ impl<'bound> Blueprint<'bound> {
                     let ident = &matc.ident;
                     let generics = &matc.generics;
 
-                    matc.default = Some((token::Eq(Span::call_site()), parse_quote!(
-                        <#ty as #bound>::#ident #generics
-                    )));
+                    matc.default = Some((
+                        token::Eq(Span::call_site()),
+                        parse_quote!(
+                            <#ty as #bound>::#ident #generics
+                        ),
+                    ));
                 }
             }
 
-            return Some(types)
+            return Some(types);
         };
 
         let mut bindings = bindings.peekable();
@@ -246,9 +249,10 @@ impl<'bound> Blueprint<'bound> {
             Some(types)
         } else {
             for binding in bindings {
-                let Some(matc) = types.iter_mut()
-                    .find_map(|assoc| assoc.ident.eq(&binding.ident)
-                    .then_some(assoc)) else {
+                let Some(matc) = types
+                    .iter_mut()
+                    .find_map(|assoc| assoc.ident.eq(&binding.ident).then_some(assoc))
+                else {
                     panic!("Missing associated trait bindings")
                 };
 
@@ -268,7 +272,7 @@ impl<'bound> Blueprint<'bound> {
 
         for item in self.schematic.items.iter() {
             let TraitItem::Method(method) = item else {
-                continue
+                continue;
             };
 
             // FIXME: FILTER RECEIVER METHODS.
@@ -564,7 +568,7 @@ impl VisitMut for RemoveBoundBindings {
         // Ugh, refactor this
         loop {
             let (Some(gen), s) = (args.next(), args.peek()) else {
-                break
+                break;
             };
 
             if !matches!(gen, GenericArgument::Binding(_)) {
