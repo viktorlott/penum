@@ -4,4 +4,9 @@ error[E0277]: the trait bound `usize: Trait` is not satisfied
 9 |     Static(usize),
   |            ^^^^^ the trait `Trait` is not implemented for `usize`
   |
+help: this trait has no implementations, consider adding one
+ --> tests/ui/trait-bound-not-satisfied.rs:5:1
+  |
+5 | trait Trait {}
+  | ^^^^^^^^^^^
   = help: see issue #48214

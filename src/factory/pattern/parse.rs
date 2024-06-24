@@ -22,8 +22,8 @@ impl Parse for ImplExpr {
             impl_token: input.parse()?,
             trait_bound: input.parse()?,
             for_token: input.parse()?,
-            /// FIXME: There's probably a better way of doing this.
-            /// Check Puncuated.
+            // FIXME: There's probably a better way of doing this.
+            // Check Puncuated.
             tys: if input.peek(token::Brace) {
                 let content;
                 let _ = braced!(content in input);

@@ -179,3 +179,24 @@ pub fn deref(attr: TokenStream, input: TokenStream) -> TokenStream {
 pub fn static_str(_: TokenStream, input: TokenStream) -> TokenStream {
     services::static_str(input)
 }
+
+/// Use this when you want to be able to associate a ...
+/// UNDER DEVELOPMENT
+/// # Example
+///
+/// ```rust
+/// #[penum::lazy_string]
+/// enum EnumVariants {
+///     Variant0      = "Return on match",
+///     Variant1(i32) = "{f0}"
+/// }
+/// let enum_variants = Enum::Variant1(10);
+/// assert_eq!("Return on match", &enum_variants);
+/// assert_eq!("Return on match", enum_variants.as_str());
+/// assert_eq!("Return on match", enum_variants.as_ref());
+/// ```
+// #[proc_macro_attribute]
+#[allow(unused)]
+fn lazy_string(_: TokenStream, input: TokenStream) -> TokenStream {
+    services::lazy_string(input)
+}

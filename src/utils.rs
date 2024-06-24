@@ -171,6 +171,7 @@ pub fn create_impl_string<'a>(
     bounds: &'a Punctuated<TypeParamBound, Add>,
     error: &'a mut Diagnostic,
 ) -> Option<String> {
+    // TODO: If we have an error, should we just return?
     let mut impl_string = String::new();
 
     for bound in bounds.iter() {
