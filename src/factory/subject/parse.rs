@@ -6,7 +6,7 @@ use syn::{
     token, Attribute, DataEnum, Generics, Token, Variant, Visibility, WhereClause,
 };
 
-use super::Subject;
+use super::{AbstractExpr, DiscriminantImpl, Subject};
 
 impl Parse for Subject {
     fn parse(input: ParseStream) -> syn::Result<Self> {
@@ -41,6 +41,26 @@ impl Parse for Subject {
         } else {
             Err(lookahead.error())
         }
+    }
+}
+
+impl Parse for AbstractExpr {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(Self {
+            bound: input.parse()?,
+            arrow: input.parse()?,
+            expr: input.parse()?,
+        })
+    }
+}
+
+impl Parse for DiscriminantImpl {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let content;
+        let _ = braced!(content in input);
+        Ok(Self {
+            composite: content.parse_terminated(AbstractExpr::parse)?,
+        })
     }
 }
 

@@ -4,7 +4,7 @@ members = ["traits"]
 
 [package]
 name = "penum"
-version = "0.1.27"
+version = "0.1.29"
 edition = "2021"
 description = "Make enum conform to a given pattern"
 license = "MIT OR Apache-2.0"
