@@ -8,6 +8,6 @@ edition = "2021"
 [dependencies]
 regex = "1.7.1"
 rustfmt = "0.10.0"
-scraper = "0.17.1"
+scraper = "0.19.1"
 sxd-document = "0.3.2"
 sxd-xpath = "0.4.2"
