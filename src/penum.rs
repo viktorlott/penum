@@ -465,7 +465,9 @@ pub trait TraitBoundUtils {
 pub trait TypeUtils {
     fn is_generic(&self) -> bool;
     fn is_placeholder(&self) -> bool;
+    #[allow(dead_code)]
     fn some_generic(&self) -> Option<String>;
+    #[allow(dead_code)]
     fn get_generic_ident(&self) -> Ident;
     fn get_unique_id(&self) -> UniqueHashId<Type>;
     fn get_type_impl_trait(&self) -> Option<&TypeImplTrait>;

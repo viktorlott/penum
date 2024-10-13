@@ -105,6 +105,7 @@ struct MonomorphizeFnSignature<'poly>(&'poly BTreeMap<Ident, &'poly Type>);
 /// |
 /// This one already gets replace during polymophic mapping step.
 /// ```
+#[allow(dead_code)]
 struct MonomorphizeTraitBound<'poly>(&'poly BTreeMap<Ident, &'poly Type>);
 
 ///        

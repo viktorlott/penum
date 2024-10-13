@@ -33,6 +33,7 @@ syn = { version = "1.0.109", features = [
     "extra-traits",
 ] }
 trybuild = "1.0.79"
+time = "0.3.35"
 
 
 [features]
