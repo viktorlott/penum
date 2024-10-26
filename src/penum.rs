@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::marker::PhantomData;
 
 use proc_macro::TokenStream;
@@ -18,6 +19,7 @@ use syn::spanned::Spanned;
 use syn::Error;
 use syn::Type;
 
+use crate::factory::Comparable;
 use crate::factory::PenumExpr;
 use crate::factory::Subject;
 use crate::factory::WherePredicate;
@@ -75,145 +77,142 @@ impl Penum<Unassembled> {
         }
     }
 
+    fn transmute_to_assembled(self) -> Penum<Assembled> {
+        // SAFETY: Transmuting self into self with a different zero-sized marker.
+        // Since State is a PhantomData, this is safe.
+        unsafe { std::mem::transmute(self) }
+    }
+
     pub fn assemble(mut self) -> Penum<Assembled> {
         // NOTE: I might be using [field / parameter / argument] interchangeably.
         // - Field usually refers to a named variants
         // - Argument usually refers to unnamed variants
         // - Parameter usually refers to penum patterns (unnamed/named).
-        let variants = &self.subject.get_variants();
-        let enum_ident = &self.subject.ident;
-        let error = &mut self.error;
 
-        if !variants.is_empty() {
-            // Expecting failure like `variant doesn't match shape`,
-            // hence pre-calling.
-            let pattern_fmt = self.expr.pattern_to_string();
+        if self.subject.get_variants().is_empty() {
+            self.error.extend(
+                self.subject.ident.span(),
+                "Expected to find at least one variant.",
+            );
 
-            // The point is that as we check for equality, we also do
-            // impl assertions by extending the `subjects` where clause.
-            // This is something that we might want to change in the
-            // future and instead use `spanned_quote` or some other
-            // bound assertion.
-            let mut predicates = Punctuated::<WherePredicate, Comma>::default();
+            return self.transmute_to_assembled();
+        }
 
-            // Prepare our patterns by converting them into
-            // `Comparables`. This is just a wrapper type that contains
-            // commonly used props.
-            let comparable_pats = self.expr.get_comparable_patterns();
+        let enum_ident = self.subject.ident.borrow();
+        // Expecting failure like `variant doesn't match shape`,
+        // hence pre-calling.
+        let pattern_fmt = self.expr.pattern_to_string();
 
-            // We pre-check our clause because we might be needing this
-            // during the dispatch step. Should add
-            // `has_dispatchable_member` maybe? let has_clause =
-            // self.expr.has_clause(); Turn into iterator instead?
-            let mut maybe_blueprint_map = self.expr.get_blueprints_map(error);
+        // The point is that as we check for equality, we also do
+        // impl assertions by extending the `subjects` where clause.
+        // This is something that we might want to change in the
+        // future and instead use `spanned_quote` or some other
+        // bound assertion.
+        let mut predicates = Punctuated::<WherePredicate, Comma>::default();
 
-            // For each variant:
-            // 1. Validate its shape by comparing discriminant and
-            //    unit/tuple/struct arity. (OUTER)
-            //    - Failure: add a "no_match_found" error and continue
-            //      to next variant.
-            // 2. Validate each parameter    ...continue... (INNER)
-            for (variant_ident, comp_item) in self.subject.comparable_fields_iter() {
-                // FIXME: This only affects concrete types.. but
-                //  `.compare(..)` should return a list of matches
-                //  instead of just the first match it finds.
-                //
-                //  # Uni-matcher -> Multi-matcher
-                //  Currently, we can end up returning a pattern that matches in shape, but not
-                //  in structure, even though another pattern could satisfy our variant. In a case
-                //  like the one below, we have a "catch all" variadic.
-                //
-                //  e.g. (i32, ..) | (..) => V1(String, i32), V2(String, String)
-                //                              ^^^^^^           ^^^^^^
-                //                              |                |
-                //                              `Found 'String' but expected 'i32'`
-                //
-                //  Because the first pattern fragment contains a concrete type, it should be possible
-                //  mark the error as temporary and then check for other pattern matches. Note, the first
-                //  error should always be the default one.
-                //
-                //  Given our pattern above, `(..)` should be a fallback pattern.
-                //
-                //  Should we allow concrete types with trait bound at argument position?
-                //  e.g.
-                //    (i32: Trait,  ..) | (..)
-                //    (i32: ^Trait, ..) | (..)
-                //
-                //  For future reference! This should help with dispach inference.
-                //
-                //  # "catch-all" syntax
-                //  Given the example above, if we were to play with it a little, we could end up with
-                //  something like this:
-                //  `(i32, ..) | _` that translate to `(i32, ..) | (..) | {..}`
-                //
-                //  Maybe it's something that would be worth having considering something like this:
-                //  `_ where String: ^AsRef<str>`
+        // Prepare our patterns by converting them into
+        // `Comparables`. This is just a wrapper type that contains
+        // commonly used props.
+        let comparable_pats = self.expr.get_comparable_patterns();
 
-                // 1. Check if we match in `shape`
-                let Some(matched_pair) = comparable_pats.compare(&comp_item) else {
-                    let (span, message) = eor!(
-                        comp_item.inner.is_empty(),
-                        (
-                            variant_ident.span(),
-                            no_match_found(variant_ident, &pattern_fmt)
-                        ),
-                        (
-                            comp_item.inner.span(),
-                            no_match_found(comp_item.inner, &pattern_fmt)
-                        )
-                    );
-                    self.error.extend(span, message);
-                    continue;
-                };
+        // We pre-check our clause because we might be needing this
+        // during the dispatch step. Should add
+        // `has_dispatchable_member` maybe? let has_clause =
+        // self.expr.has_clause(); Turn into iterator instead?
+        let mut opt_blueprints = self.expr.get_blueprints_map(self.error.borrow());
 
-                // No support for empty unit iter, yet...
-                // NOTE: Make sure to handle composite::unit iterator before removing this
-                if matched_pair.as_composite().is_unit() {
-                    continue;
-                }
+        // For each variant:
+        // 1. Validate its shape by comparing discriminant and
+        //    unit/tuple/struct arity. (OUTER)
+        //    - Failure: add a "no_match_found" error and continue
+        //      to next variant.
+        // 2. Validate each parameter    ...continue... (INNER)
+        for (variant_ident, comparable_item) in self.subject.comparable_fields_iter() {
+            // FIXME: This only affects concrete types.. but
+            //  `.compare(..)` should return a list of matches
+            //  instead of just the first match it finds.
+            //
+            //  # Uni-matcher -> Multi-matcher
+            //  Currently, we can end up returning a pattern that matches in shape, but not
+            //  in structure, even though another pattern could satisfy our variant. In a case
+            //  like the one below, we have a "catch all" variadic.
+            //
+            //  e.g. (i32, ..) | (..) => V1(String, i32), V2(String, String)
+            //                              ^^^^^^           ^^^^^^
+            //                              |                |
+            //                              `Found 'String' but expected 'i32'`
+            //
+            //  Because the first pattern fragment contains a concrete type, it should be possible
+            //  mark the error as temporary and then check for other pattern matches. Note, the first
+            //  error should always be the default one.
+            //
+            //  Given our pattern above, `(..)` should be a fallback pattern.
+            //
+            //  Should we allow concrete types with trait bound at argument position?
+            //  e.g.
+            //    (i32: Trait,  ..) | (..)
+            //    (i32: ^Trait, ..) | (..)
+            //
+            //  For future reference! This should help with dispach inference.
+            //
+            //  # "catch-all" syntax
+            //  Given the example above, if we were to play with it a little, we could end up with
+            //  something like this:
+            //  `(i32, ..) | _` that translate to `(i32, ..) | (..) | {..}`
+            //
+            //  Maybe it's something that would be worth having considering something like this:
+            //  `_ where String: ^AsRef<str>`
 
-                let arity = comp_item.inner.len();
+            // 1. Check if we match in `shape`
+            let Some(matched_pair) = comparable_pats.compare(&comparable_item) else {
+                self.report_invalid_shape(&comparable_item, variant_ident, &pattern_fmt);
+                continue;
+            };
 
-                // 2. Check if we match in `structure`. (We are naively
-                // always expecting to never have infixed variadics)
-                for (field_index, (param_pattern, field_item)) in matched_pair.zip().enumerate() {
-                    let item_ty_unique = field_item.ty.get_unique_id();
+            // No support for empty unit iter, yet...
+            // NOTE: Make sure to handle composite::unit iterator before removing this
+            if matched_pair.as_composite().is_unit() {
+                continue;
+            }
 
-                    if param_pattern.is_infer() {
-                        handle_inferred_pat(
-                            &mut self.types,
-                            &mut maybe_blueprint_map,
+            let arity = comparable_item.inner.len();
+
+            // 2. Check if we match in `structure`. (We are naively
+            // always expecting to never have infixed variadics)
+            for (field_index, (param_pattern, field_item)) in matched_pair.zip().enumerate() {
+                let item_ty_unique = field_item.ty.get_unique_id();
+
+                if param_pattern.is_infer() {
+                    opt_blueprints.as_mut().map(|blueprints| {
+                        blueprints.find_and_attach_variant_sig(
                             enum_ident,
                             variant_ident,
                             field_item,
                             field_index,
                             arity,
-                            item_ty_unique,
+                            &item_ty_unique,
                         );
+                    });
 
-                        continue;
-                    }
+                    self.types
+                        .polymap_insert(item_ty_unique.clone(), item_ty_unique);
 
-                    // If we cannot desctructure a pattern field, then it must be variadic.
-                    //
-                    // NOTE: This causes certain bugs (see tests/test-concrete-bound.rs)
-                    let Some(pat_field) = param_pattern.get_field() else {
-                        break;
-                    };
+                    continue;
+                }
 
-                    // FIXME: Remove this, or refactor it. Remember that there's
-                    // tests that needs to be removed/changed.
-                    if let Some(ty_impl_trait) = pat_field.ty.get_type_impl_trait() {
-                        let bounds = &ty_impl_trait.bounds;
+                // If we cannot desctructure a pattern field, then it must be variadic.
+                //
+                // NOTE: This causes certain bugs (see tests/test-concrete-bound.rs)
+                let Some(pat_field) = param_pattern.get_field() else {
+                    break;
+                };
 
-                        let Some(impl_string) = create_impl_string(bounds, &mut self.error) else {
-                            // FIXME: Add debug logs.
-                            //
-                            // No point of continuing if we have errors or
-                            // unique_impl_id is empty
-                            continue;
-                        };
+                // FIXME: Remove this, or refactor it. Remember that there's
+                // tests that needs to be removed/changed.
+                if let Some(ty_impl_trait) = pat_field.ty.get_type_impl_trait() {
+                    let bounds = &ty_impl_trait.bounds;
 
+                    create_impl_string(bounds, &self.error).map(|impl_string| {
                         let unique_impl_id =
                             create_unique_ident(&impl_string, variant_ident, ty_impl_trait.span());
 
@@ -223,165 +222,168 @@ impl Penum<Unassembled> {
                         // If it exists, insert new concrete type.
                         self.types
                             .polymap_insert(unique_impl_id.clone().into(), item_ty_unique);
-                    } else {
-                        let pat_ty_unique = pat_field.ty.get_unique_id();
-
-                        let variant_sig = VariantSig::new(
-                            enum_ident,
-                            variant_ident,
-                            field_item,
-                            field_index,
-                            arity,
-                        );
-
-                        // Check if it's a generic or concrete type
-                        // - We only accept `_|[A-Z][A-Z0-9]*` as generics.
-                        //
-                        // NOTE: `is_generic` is redundant given that we have already created the
-                        // pat_ty_string.
-                        if pat_field.ty.is_generic() {
-                            // If the variant field is equal to the pattern field, then the variant
-                            // field must be generic, therefore we should introduce a <gen> expr for
-                            // the enum IF there doesn't exist one.
-                            if item_ty_unique.eq(&pat_ty_unique) {
-                                // Continuing means that we wont add T bounds to polymap
-                                if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                                    blueprints.find_and_attach(
-                                        &pat_ty_unique,
-                                        &variant_sig,
-                                        Some(&item_ty_unique),
-                                    );
-                                };
-
-                                self.types
-                                    .polymap_insert(pat_ty_unique, item_ty_unique.clone());
-                            } else {
-                                if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                                    for ty_unique in [&pat_ty_unique, &item_ty_unique] {
-                                        blueprints.find_and_attach(
-                                            ty_unique,
-                                            &variant_sig,
-                                            Some(&item_ty_unique),
-                                        );
-                                    }
-                                };
-
-                                for ty_unique in [pat_ty_unique, item_ty_unique.clone()] {
-                                    self.types.polymap_insert(ty_unique, item_ty_unique.clone());
-                                }
-                            }
-
-                            // FIXME: This will only work for nullary type constructors.
-                        } else if pat_field.ty.is_placeholder() {
-                            // Make sure we map the concrete type instead of the pat_ty
-                            if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                                blueprints.find_and_attach(
-                                    &item_ty_unique,
-                                    &variant_sig,
-                                    Some(&item_ty_unique),
-                                );
-                            }
-                            self.types
-                                .polymap_insert(item_ty_unique.clone(), item_ty_unique);
-
-                            // is concrete type equal to concrete type
-                        } else if item_ty_unique.eq(&pat_ty_unique) {
-                            // 3. Dispachable list
-                            if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-                                blueprints.find_and_attach(
-                                    &item_ty_unique,
-                                    &variant_sig,
-                                    Some(&item_ty_unique),
-                                );
-                            }
-
-                            self.types.polymap_insert(
-                                pat_ty_unique, // PATTERN
-                                item_ty_unique,
-                            );
-                        } else {
-                            // TODO: Refactor into TypeId instead.
-                            let item_ty_string = field_item.ty.get_string();
-                            // NOTE: This string only contains the Ident, so any generic parameters will
-                            // be discarded.
-                            let pat_ty_string = pat_field.ty.get_string();
-
-                            self.error.extend_spanned(
-                                &field_item.ty,
-                                format!("Found `{item_ty_string}` but expected `{pat_ty_string}`."),
-                            );
-                        }
-                    }
+                    });
+                    // else {
+                    // FIXME: Add debug logs.
+                    //
+                    // No point of continuing if we have errors or
+                    // unique_impl_id is empty
+                    // }
+                    continue;
                 }
-            }
 
-            // Assemble all our impl statements
-            if let Some(blueprints) = maybe_blueprint_map {
-                let (impl_generics, ty_generics, where_clause) =
-                    &self.subject.generics.split_for_impl();
+                let pat_ty_unique = pat_field.ty.get_unique_id();
 
-                blueprints.for_each_blueprint(|blueprint| {
-                    let trait_path = blueprint.get_sanatized_impl_path();
-                    let assoc_methods = blueprint.get_associated_methods();
+                let variant_sig =
+                    VariantSig::new(enum_ident, variant_ident, field_item, field_index, arity);
 
-                    let assoc_types = blueprint.get_mapped_bindings().map(|bind| {
-                        bind.iter()
-                            .map(|b| b.to_token_stream())
-                            .collect::<TokenStream2>()
+                // Check if it's a generic or concrete type
+                // - We only accept `_|[A-Z][A-Z0-9]*` as generics.
+                //
+                // NOTE: `is_generic` is redundant given that we have already created the
+                // pat_ty_string.
+                let pat_field_ty_is_generic = pat_field.ty.is_generic();
+                let item_ty_and_pat_ty_is_equal = item_ty_unique == pat_ty_unique;
+
+                if pat_field_ty_is_generic && item_ty_and_pat_ty_is_equal {
+                    opt_blueprints.as_mut().map(|blueprints| {
+                        blueprints.find_and_attach(
+                            &pat_ty_unique,
+                            &variant_sig,
+                            Some(&item_ty_unique),
+                        );
                     });
 
-                    let implementation: ItemImpl = parse_quote!(
-                        impl #impl_generics #trait_path for #enum_ident #ty_generics #where_clause {
-                            #assoc_types
+                    self.types
+                        .polymap_insert(pat_ty_unique, item_ty_unique.clone());
 
-                            #(#assoc_methods)*
+                    continue;
+                }
+
+                if pat_field_ty_is_generic && !item_ty_and_pat_ty_is_equal {
+                    opt_blueprints.as_mut().map(|blueprints| {
+                        for ty_unique in [&pat_ty_unique, &item_ty_unique] {
+                            blueprints.find_and_attach(
+                                ty_unique,
+                                &variant_sig,
+                                Some(&item_ty_unique),
+                            );
                         }
+                    });
+
+                    for ty_unique in [pat_ty_unique, item_ty_unique.clone()] {
+                        self.types.polymap_insert(ty_unique, item_ty_unique.clone());
+                    }
+                    continue;
+                }
+
+                // is concrete type equal to concrete type
+                if item_ty_and_pat_ty_is_equal {
+                    // 3. Dispachable list
+                    opt_blueprints.as_mut().map(|blueprints| {
+                        blueprints.find_and_attach(
+                            &item_ty_unique,
+                            &variant_sig,
+                            Some(&item_ty_unique),
+                        );
+                    });
+
+                    self.types.polymap_insert(
+                        pat_ty_unique, // PATTERN
+                        item_ty_unique,
                     );
 
-                    self.impls.push(implementation);
-                });
+                    continue;
+                }
+
+                // FIXME: This will only work for nullary type constructors.
+                if pat_field.ty.is_placeholder() {
+                    // Make sure we map the concrete type instead of the pat_ty
+                    opt_blueprints.as_mut().map(|blueprints| {
+                        blueprints.find_and_attach(
+                            &item_ty_unique,
+                            &variant_sig,
+                            Some(&item_ty_unique),
+                        );
+                    });
+
+                    self.types
+                        .polymap_insert(item_ty_unique.clone(), item_ty_unique);
+
+                    continue;
+                }
+
+                // ELSE DO THIS:
+
+                // TODO: Refactor into TypeId instead.
+                let item_ty_string = field_item.ty.get_string();
+                // NOTE: This string only contains the Ident, so any generic parameters will
+                // be discarded.
+                let pat_ty_string = pat_field.ty.get_string();
+
+                self.error.extend_spanned(
+                    &field_item.ty,
+                    format!("Found `{item_ty_string}` but expected `{pat_ty_string}`."),
+                );
             }
-
-            let penum_expr_clause = self.expr.clause.get_or_insert_with(|| parse_quote!(where));
-
-            // Might be a little unnecessary to loop through our
-            // predicates again.. But we can refactor later.
-            predicates
-                .iter()
-                .for_each(|pred| penum_expr_clause.predicates.push(parse_quote!(#pred)));
-        } else {
-            self.error.extend(
-                self.subject.ident.span(),
-                "Expected to find at least one variant.",
-            );
         }
 
-        // SAFETY: We are transmuting self into self with a different
-        //         ZST marker that is just there to let us decide what
-        //         methods should be available during different stages.
-        //         So it's safe for us to transmute.
-        unsafe { std::mem::transmute(self) }
-    }
-}
+        // Assemble all our impl statements
+        opt_blueprints.map(|blueprints| {
+            let (impl_generics, ty_generics, where_clause) =
+                &self.subject.generics.split_for_impl();
 
-#[inline(always)]
-fn handle_inferred_pat(
-    types: &mut PolymorphicMap<UniqueHashId<Type>, UniqueHashId<Type>>,
-    maybe_blueprint_map: &mut Option<crate::dispatch::BlueprintsMap<'_>>,
-    enum_ident: &Ident,
-    variant_ident: &Ident,
-    field_item: &syn::Field,
-    field_index: usize,
-    arity: usize,
-    item_ty_unique: UniqueHashId<Type>,
-) {
-    if let Some(blueprints) = maybe_blueprint_map.as_mut() {
-        let variant_sig =
-            VariantSig::new(enum_ident, variant_ident, field_item, field_index, arity);
+            blueprints.for_each_blueprint(|blueprint| {
+                let trait_path = blueprint.get_sanatized_impl_path();
+                let assoc_methods = blueprint.get_associated_methods();
 
-        blueprints.find_and_attach(&item_ty_unique, &variant_sig, Some(&item_ty_unique));
+                let assoc_types = blueprint.get_mapped_bindings().map(|bind| {
+                    bind.iter()
+                        .map(|b| b.to_token_stream())
+                        .collect::<TokenStream2>()
+                });
+
+                let implementation: ItemImpl = parse_quote!(
+                    impl #impl_generics #trait_path for #enum_ident #ty_generics #where_clause {
+                        #assoc_types
+
+                        #(#assoc_methods)*
+                    }
+                );
+
+                self.impls.push(implementation);
+            });
+        });
+
+        let penum_expr_clause = self.expr.clause.get_or_insert_with(|| parse_quote!(where));
+
+        // Might be a little unnecessary to loop through our
+        // predicates again.. But we can refactor later.
+        predicates
+            .iter()
+            .for_each(|pred| penum_expr_clause.predicates.push(parse_quote!(#pred)));
+
+        self.transmute_to_assembled()
     }
-    types.polymap_insert(item_ty_unique.clone(), item_ty_unique);
+
+    fn report_invalid_shape(
+        &self,
+        comparable_item: &Comparable<'_, syn::Fields>,
+        variant_ident: &Ident,
+        pattern_fmt: &String,
+    ) {
+        if comparable_item.inner.is_empty() {
+            self.error.extend(
+                variant_ident.span(),
+                no_match_found(variant_ident, pattern_fmt),
+            );
+        } else {
+            self.error.extend(
+                comparable_item.inner.span(),
+                no_match_found(comparable_item.inner, pattern_fmt),
+            );
+        };
+    }
 }
 
 impl Penum<Assembled> {
@@ -519,17 +521,18 @@ impl TraitBoundUtils for TraitBound {
     }
 }
 
-macro_rules! eor {
-    ($x:expr, $left:expr, $right:expr) => {
-        if $x {
-            $left
-        } else {
-            $right
-        }
-    };
-}
+// Dont use this shit.
+// macro_rules! eor {
+//     ($x:expr, $left:expr, $right:expr) => {
+//         if $x {
+//             ($left.0.span(), $left.1)
+//         } else {
+//             ($right.0.span(), $right.1)
+//         }
+//     };
+// }
 
-pub(self) use eor;
+// pub(self) use eor;
 
 #[cfg(test)]
 mod tests {

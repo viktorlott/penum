@@ -168,7 +168,7 @@ impl PenumExpr {
     ///
     /// SOLUTION: We could keep this as it is, and instead fold our blueprints map so that types with the
     /// same trait bounds are combined.
-    pub fn get_blueprints_map(&self, error: &mut Diagnostic) -> Option<BlueprintsMap> {
+    pub fn get_blueprints_map(&self, error: &Diagnostic) -> Option<BlueprintsMap> {
         let Some(clause) = self.clause.as_ref() else {
             return None;
         };
@@ -277,20 +277,22 @@ impl PatComposite {
         match self {
             PatComposite::Named { parameters, .. } => parameters.iter(),
             PatComposite::Unnamed { parameters, .. } => parameters.iter(),
-            // "SAFETY": This is not recommended. The thing is that we
-            //           are transmuting an empty iter that is created
-            //           from a static Punctuated struct. The lifetime
-            //           is invariant in Iter<'_> which means that we
-            //           are not allowed to return another lifetime,
-            //           even if it outlives 'a. But, in this case it
-            //           should be "okay" given that it's static and empty.
-            //           Though, I'm not 100% sure if this actually can
-            //           cause UB because of the Punctuated Adding to this, it's not currently
-            //           possible to get here right now because of the
-            //           if statement in
-            //           `penum::assemble->is_unit()->continue`. So this
-            //           could also be marked as `unreachable`.
-            _ => EMPTY_SLICE_ITER.with(|f| unsafe { std::mem::transmute(f.iter()) }),
+            _ => EMPTY_SLICE_ITER.with(|f| {
+                // "SAFETY": This is not recommended. The thing is that we
+                //           are transmuting an empty iter that is created
+                //           from a static Punctuated struct. The lifetime
+                //           is invariant in Iter<'_> which means that we
+                //           are not allowed to return another lifetime,
+                //           even if it outlives 'a. But, in this case it
+                //           should be "okay" given that it's static and empty.
+                //           Though, I'm not 100% sure if this actually can
+                //           cause UB because of the Punctuated Adding to this, it's not currently
+                //           possible to get here right now because of the
+                //           if statement in
+                //           `penum::assemble->is_unit()->continue`. So this
+                //           could also be marked as `unreachable`.
+                unsafe { std::mem::transmute(f.iter()) }
+            }),
         }
     }
 

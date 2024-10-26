@@ -509,6 +509,21 @@ impl<'bound> BlueprintsMap<'bound> {
             false
         }
     }
+
+    pub fn find_and_attach_variant_sig(
+        &mut self,
+        enum_ident: &Ident,
+        variant_ident: &Ident,
+        field_item: &syn::Field,
+        field_index: usize,
+        arity: usize,
+        item_ty_unique: &UniqueHashId<Type>,
+    ) {
+        let variant_sig =
+            VariantSig::new(enum_ident, variant_ident, field_item, field_index, arity);
+
+        self.find_and_attach(item_ty_unique, &variant_sig, Some(item_ty_unique));
+    }
 }
 
 impl<'bound> Deref for BlueprintsMap<'bound> {
