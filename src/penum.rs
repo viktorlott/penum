@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 
-use quote::format_ident;
 use quote::ToTokens;
 
 use syn::punctuated::Punctuated;
@@ -12,8 +11,6 @@ use syn::token::Add;
 use syn::token::Comma;
 use syn::Ident;
 use syn::ItemImpl;
-use syn::TraitBound;
-use syn::TypeImplTrait;
 
 use syn::parse_quote;
 use syn::spanned::Spanned;
@@ -33,8 +30,12 @@ use crate::utils::create_unique_ident;
 use crate::utils::lifetime_not_permitted;
 use crate::utils::maybe_bounds_not_permitted;
 use crate::utils::no_match_found;
-use crate::utils::PolymorphicMap;
-use crate::utils::UniqueHashId;
+use crate::utils::Stringify;
+use crate::utils::TraitBoundUtils;
+use crate::utils::TypeUtils;
+
+use crate::polym::PolymorphicMap;
+use crate::polym::UniqueHashId;
 
 pub struct Unassembled;
 pub struct Assembled;
@@ -358,6 +359,12 @@ impl Penum<Unassembled> {
             });
         });
 
+        self.update_where_clause(&predicates);
+
+        self.transmute_to_assembled()
+    }
+
+    fn update_where_clause(&mut self, predicates: &Punctuated<WherePredicate, Comma>) {
         let penum_expr_clause = self.expr.clause.get_or_insert_with(|| parse_quote!(where));
 
         // Might be a little unnecessary to loop through our
@@ -365,8 +372,6 @@ impl Penum<Unassembled> {
         predicates
             .iter()
             .for_each(|pred| penum_expr_clause.predicates.push(parse_quote!(#pred)));
-
-        self.transmute_to_assembled()
     }
 
     fn report_invalid_shape(
@@ -483,74 +488,6 @@ impl Penum<Assembled> {
         }
 
         (self.subject, self.impls, self.error)
-    }
-}
-
-// NOTE: I will eventually clean this mess up
-pub trait Stringify: ToTokens {
-    fn get_string(&self) -> String {
-        self.to_token_stream().to_string()
-    }
-}
-
-pub trait TraitBoundUtils {
-    fn get_unique_trait_bound_id(&self) -> String;
-}
-
-pub trait TypeUtils {
-    fn is_generic(&self) -> bool;
-    fn is_placeholder(&self) -> bool;
-    #[allow(dead_code)]
-    fn some_generic(&self) -> Option<String>;
-    #[allow(dead_code)]
-    fn get_generic_ident(&self) -> Ident;
-    fn get_unique_id(&self) -> UniqueHashId<Type>;
-    fn get_type_impl_trait(&self) -> Option<&TypeImplTrait>;
-}
-
-impl<T> Stringify for T where T: ToTokens {}
-
-impl TypeUtils for Type {
-    fn get_type_impl_trait(&self) -> Option<&TypeImplTrait> {
-        if let Type::ImplTrait(ref ty_impl_trait) = self {
-            Some(ty_impl_trait)
-        } else {
-            None
-        }
-    }
-
-    fn is_generic(&self) -> bool {
-        let pat_ty_string = self.to_token_stream().to_string();
-        !self.is_placeholder() && pat_ty_string.to_uppercase().eq(&pat_ty_string)
-    }
-
-    fn is_placeholder(&self) -> bool {
-        matches!(self, Type::Infer(_))
-    }
-
-    fn some_generic(&self) -> Option<String> {
-        self.is_placeholder()
-            .then(|| {
-                let pat_ty = self.get_string();
-                pat_ty.to_uppercase().eq(&pat_ty).then_some(pat_ty)
-            })
-            .flatten()
-    }
-
-    /// Only use this when you are sure it's a generic type.
-    fn get_generic_ident(&self) -> Ident {
-        format_ident!("{}", self.get_string(), span = self.span())
-    }
-
-    fn get_unique_id(&self) -> UniqueHashId<Type> {
-        UniqueHashId::new(self)
-    }
-}
-
-impl TraitBoundUtils for TraitBound {
-    /// We use this when we want to create an "impl" string. It's
-    fn get_unique_trait_bound_id(&self) -> String {
-        UniqueHashId(self).get_unique_string()
     }
 }
 

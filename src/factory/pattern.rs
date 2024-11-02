@@ -9,7 +9,7 @@ use quote::ToTokens;
 use crate::{
     dispatch::{Blueprint, BlueprintsMap},
     error::Diagnostic,
-    utils::UniqueHashId,
+    polym::UniqueHashId,
 };
 
 use super::{ComparablePats, PredicateType, WhereClause, WherePredicate};

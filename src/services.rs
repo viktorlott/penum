@@ -9,7 +9,7 @@ use crate::dispatch::T_SHM;
 use crate::factory::PenumExpr;
 use crate::factory::Subject;
 use crate::penum::Penum;
-use crate::penum::Stringify;
+use crate::utils::Stringify;
 
 pub fn penum_expand(attr: TokenStream, input: TokenStream) -> TokenStream {
     // TODO: Make it bi-directional, meaning it's also possible to register enums and then do

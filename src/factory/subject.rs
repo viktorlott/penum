@@ -9,10 +9,7 @@ use syn::{
     Visibility,
 };
 
-use crate::{
-    penum::Stringify,
-    utils::{ABSTRACT_MACRO_EXPR_SYMBOL, DEFAULT_VARIANT_SYMBOL},
-};
+use crate::utils::{Stringify, ABSTRACT_MACRO_EXPR_SYMBOL, DEFAULT_VARIANT_SYMBOL};
 
 use super::Comparable;
 

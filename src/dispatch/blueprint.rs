@@ -26,7 +26,7 @@ use syn::Type;
 use syn::TypeParam;
 
 use crate::factory::TraitBound;
-use crate::utils::UniqueHashId;
+use crate::polym::UniqueHashId;
 
 use super::ret::return_default_ret_type;
 use super::ret::return_panic;
